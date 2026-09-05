@@ -27,7 +27,7 @@ Integration runs use the isolated `dealflow_test_20260905` schema. Never run tes
 - Entitlements: browser QA, publication volume/transaction performance and next-boundary snapshot integration.
 - Portal: all new routes browser/tenant leakage checks, proposal apply/decline and auto-apply routing tests, secure login/share journey, pagination beyond quotations. Share route currently returns to portal home after magic-link verification.
 - Phase 10 implementation exists: detectors, scan service, scoped event hooks, filters/actions UI, daily job and dashboard card. Still verify browser behavior, large scan performance, complete activity hooks, database-enforced nullable-key uniqueness and historical anomaly cases.
-- Phase 11: pure KPI functions started and tested. Manual report query/UI, stakeholder analytics, PDF and spreadsheet exports remain.
+- Phase 11 manual report query/UI and PDF/XLSX exports implemented with shared filters and role scope. Report integration test passed; workbook readback and PDF rendering tests passed; all four report pages and invoice layout inspected. Latest suite: 107 unit/export tests passed; typecheck, lint and production build passed. Stakeholder analytics breadth, report browser QA, historical financial semantics, persistent table pagination and final home dashboard remain.
 - Phase 12: design-system/landing/auth polish, accessibility, responsive QA, sidebar action consolidation.
 - Phase 13: demo scenarios, CI, full security/concurrency/acceptance audit, operational documentation and final logical commits.
 
