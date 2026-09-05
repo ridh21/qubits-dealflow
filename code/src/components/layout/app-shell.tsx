@@ -1,9 +1,28 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { logoutAction, portalLogoutAction } from "@/server/actions/auth.actions";
+import {
+  logoutAction,
+  portalLogoutAction,
+} from "@/server/actions/auth.actions";
 import { SignOut } from "@/components/icons";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenuButton, SidebarProvider, SidebarSeparator, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenuButton,
+  SidebarProvider,
+  SidebarSeparator,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  WorkspaceActionsProvider,
+  WorkspaceActionsSlot,
+} from "./workspace-actions";
 import { SidebarNavigation, type NavItem } from "./sidebar-navigation";
 
 export type { NavItem } from "./sidebar-navigation";
@@ -37,44 +56,91 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin/emails", label: "Email outbox" },
 ];
 
-export function AppShell({ nav, user, children, variant = "internal" }: {
+export function AppShell({
+  nav,
+  user,
+  children,
+  variant = "internal",
+}: {
   nav: NavItem[];
   user: { name?: string | null; email?: string | null; role?: string };
   children: ReactNode;
   variant?: "internal" | "portal";
 }) {
   const portal = variant === "portal";
-  const configuration = user.role === "ADMIN" ? ADMIN_NAV : ADMIN_NAV.filter((item) =>
-    item.href === "/admin/policy" || (user.role === "FINANCE" && item.href === "/admin/warehouses"));
-  return <TooltipProvider><SidebarProvider>
-    <Sidebar collapsible="offcanvas">
-      <SidebarHeader className="gap-4 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <Link href={portal ? "/portal" : "/dashboard"} className="font-display flex items-center gap-2 font-semibold">
-            <span className="bg-primary text-primary-foreground grid size-8 place-items-center rounded-lg">D</span>DealFlow360
-          </Link>
-          <SidebarTrigger className="md:hidden" />
-        </div>
-        <p className="text-muted-foreground text-xs">{portal ? "Customer portal" : "Sales operations"}</p>
-      </SidebarHeader>
-      <SidebarSeparator />
-      <SidebarContent>
-        <SidebarGroup><SidebarGroupLabel>Workspace</SidebarGroupLabel><SidebarNavigation items={nav} /></SidebarGroup>
-        {!portal && <SidebarGroup><SidebarGroupLabel>Configuration</SidebarGroupLabel><SidebarNavigation items={configuration} /></SidebarGroup>}
-        <div id="workspace-actions" />
-      </SidebarContent>
-      <SidebarFooter className="border-t p-4">
-        <p className="truncate text-sm font-medium">{user.name ?? user.email}</p>
-        <p className="text-muted-foreground mb-2 text-xs capitalize">{user.role?.replaceAll("_", " ").toLowerCase()}</p>
-        <form action={portal ? portalLogoutAction : logoutAction}>
-          <SidebarMenuButton type="submit"><SignOut className="size-4" /><span>Sign out</span></SidebarMenuButton>
-        </form>
-      </SidebarFooter>
-    </Sidebar>
-    <SidebarInset className="min-w-0">
-      <div className="p-3 md:hidden"><SidebarTrigger aria-label="Open navigation" /></div>
-      <div className="mx-auto w-full max-w-[1440px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
-      <footer className="text-muted-foreground border-t px-6 py-4 text-xs">DealFlow360 · Quotation to payment, with every decision accounted for.</footer>
-    </SidebarInset>
-  </SidebarProvider></TooltipProvider>;
+  const configuration =
+    user.role === "ADMIN"
+      ? ADMIN_NAV
+      : ADMIN_NAV.filter(
+          (item) =>
+            item.href === "/admin/policy" ||
+            (user.role === "FINANCE" && item.href === "/admin/warehouses"),
+        );
+  return (
+    <TooltipProvider>
+      <WorkspaceActionsProvider>
+        <SidebarProvider>
+          <Sidebar collapsible="offcanvas">
+            <SidebarHeader className="gap-4 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <Link
+                  href={portal ? "/portal" : "/dashboard"}
+                  className="font-display flex items-center gap-2 font-semibold"
+                >
+                  <span className="bg-primary text-primary-foreground grid size-8 place-items-center rounded-lg">
+                    D
+                  </span>
+                  DealFlow360
+                </Link>
+                <SidebarTrigger className="md:hidden" />
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {portal ? "Customer portal" : "Sales operations"}
+              </p>
+            </SidebarHeader>
+            <SidebarSeparator />
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+                <SidebarNavigation items={nav} />
+              </SidebarGroup>
+              {!portal && (
+                <SidebarGroup>
+                  <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+                  <SidebarNavigation items={configuration} />
+                </SidebarGroup>
+              )}
+              <WorkspaceActionsSlot />
+            </SidebarContent>
+            <SidebarFooter className="border-t p-4">
+              <p className="truncate text-sm font-medium">
+                {user.name ?? user.email}
+              </p>
+              <p className="text-muted-foreground mb-2 text-xs capitalize">
+                {user.role?.replaceAll("_", " ").toLowerCase()}
+              </p>
+              <form action={portal ? portalLogoutAction : logoutAction}>
+                <SidebarMenuButton type="submit">
+                  <SignOut className="size-4" />
+                  <span>Sign out</span>
+                </SidebarMenuButton>
+              </form>
+            </SidebarFooter>
+          </Sidebar>
+          <SidebarInset className="min-w-0">
+            <div className="p-3 md:hidden">
+              <SidebarTrigger aria-label="Open navigation" />
+            </div>
+            <div className="mx-auto w-full max-w-[1440px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+              {children}
+            </div>
+            <footer className="text-muted-foreground border-t px-6 py-4 text-xs">
+              DealFlow360 · Quotation to payment, with every decision accounted
+              for.
+            </footer>
+          </SidebarInset>
+        </SidebarProvider>
+      </WorkspaceActionsProvider>
+    </TooltipProvider>
+  );
 }

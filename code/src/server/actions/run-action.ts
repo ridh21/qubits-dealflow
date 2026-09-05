@@ -13,8 +13,19 @@ export async function runAction<S extends z.ZodType, T>(options: {
 }): Promise<ActionResult<T>> {
   try {
     const actor = await requireRole(options.roles);
-    const parsed = options.schema.safeParse(options.input instanceof FormData ? Object.fromEntries(options.input) : options.input);
-    if (!parsed.success) return { ok: false, error: { code: "VALIDATION", message: parsed.error.issues[0]?.message ?? "Check the form fields." } };
+    const parsed = options.schema.safeParse(
+      options.input instanceof FormData
+        ? Object.fromEntries(options.input)
+        : options.input,
+    );
+    if (!parsed.success)
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION",
+          message: parsed.error.issues[0]?.message ?? "Check the form fields.",
+        },
+      };
     const data = await options.execute(actor, parsed.data);
     for (const path of options.paths ?? []) revalidatePath(path);
     return { ok: true, data };
