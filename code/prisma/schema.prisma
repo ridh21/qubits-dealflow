@@ -1,0 +1,1071 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ───────── Identity ─────────
+enum Role {
+  PENDING
+  ADMIN
+  SALES_REP
+  SALES_MANAGER
+  FINANCE
+  CUSTOMER
+}
+
+enum CustomerTier {
+  BRONZE
+  SILVER
+  GOLD
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String?
+  role         Role     @default(PENDING)
+  teamId       String?
+  team         Team?    @relation(fields: [teamId], references: [id])
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  isActive     Boolean  @default(false)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  ownedQuotations Quotation[]    @relation("owner")
+  approvalSteps   ApprovalStep[] @relation("assignee")
+  notifications   Notification[]
+
+  @@index([role, isActive])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  purpose    String   @default("PORTAL_LOGIN")
+
+  @@unique([identifier, token])
+}
+
+model Customer {
+  id             String       @id @default(cuid())
+  name           String
+  tier           CustomerTier @default(BRONZE)
+  currency       String       @default("USD")
+  email          String?
+  billingAddress String?
+  priceListId    String?
+  priceList      PriceList?   @relation(fields: [priceListId], references: [id])
+  isActive       Boolean      @default(true)
+
+  users         User[]
+  quotations    Quotation[]
+  orders        Order[]
+  invoices      Invoice[]
+  subscriptions Subscription[]
+  creditNotes   CreditNote[]
+  createdAt     DateTime       @default(now())
+}
+
+// ───────── Catalogue ─────────
+enum RecurringInterval {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum ProductType {
+  PHYSICAL
+  SERVICE
+  SUBSCRIPTION
+}
+
+enum ProductStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  sortOrder Int       @default(0)
+  products  Product[]
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  sku            String        @unique
+  name           String
+  description    String?
+  categoryId     String
+  category       Category      @relation(fields: [categoryId], references: [id])
+  type           ProductType   @default(PHYSICAL)
+  unit           String        @default("Each")
+  basePriceMinor Int
+  costPriceMinor Int
+  taxBp          Int           @default(0)
+  isPromoted     Boolean       @default(false)
+  minMarginBp    Int           @default(0)
+  status         ProductStatus @default(ACTIVE)
+
+  attributes     VariantAttribute[]
+  priceListItems PriceListItem[]
+  stockLevels    StockLevel[]
+  replenishments ReplenishmentPlan[]
+  tiers          PlanTier[]
+  entitlementDefs EntitlementDefinition[]
+  plans          SubscriptionPlan[]
+  upsellFrom     UpsellRule[]       @relation("from")
+  upsellTo       UpsellRule[]       @relation("to")
+  quotationLines QuotationLine[]
+  orderLines     OrderLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId, status])
+}
+
+model VariantAttribute {
+  id        String         @id @default(cuid())
+  productId String
+  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int            @default(0)
+  values    VariantValue[]
+}
+
+model VariantValue {
+  id              String           @id @default(cuid())
+  attributeId     String
+  attribute       VariantAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  value           String
+  extraPriceMinor Int              @default(0)
+}
+
+enum PriceRule {
+  NO_ADJUSTMENT
+  PERCENT_OFF_BASE
+  FIXED_ITEMS
+}
+
+model PriceList {
+  id           String        @id @default(cuid())
+  name         String
+  currency     String        @default("USD")
+  tier         CustomerTier?
+  rule         PriceRule     @default(NO_ADJUSTMENT)
+  percentOffBp Int           @default(0)
+  version      Int           @default(1)
+  isActive     Boolean       @default(true)
+  items        PriceListItem[]
+  customers    Customer[]
+}
+
+model PriceListItem {
+  id          String    @id @default(cuid())
+  priceListId String
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  priceMinor  Int
+
+  @@unique([priceListId, productId])
+}
+
+// ───────── Policy Center (versioned) ─────────
+enum PolicyKind {
+  DISCOUNT_RISK
+  FULFILLMENT
+  BILLING
+  DEAL_HEALTH
+  PORTAL
+  RECOMMENDATION
+}
+
+model PolicyVersion {
+  id            String     @id @default(cuid())
+  kind          PolicyKind
+  version       Int
+  payload       Json
+  isActive      Boolean    @default(false)
+  publishedById String?
+  publishedAt   DateTime   @default(now())
+  reason        String?
+
+  @@unique([kind, version])
+  @@index([kind, isActive])
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+model NumberSequence {
+  key  String @id
+  next Int    @default(1000)
+}
+
+// ───────── Warehousing ─────────
+model Warehouse {
+  id                      String @id @default(cuid())
+  name                    String @unique
+  code                    String @unique
+  shippingCostWeightMinor Int    @default(0)
+  fixedShipmentCostMinor  Int    @default(0)
+  priority                Int    @default(0)
+  isActive                Boolean @default(true)
+
+  stockLevels    StockLevel[]
+  allocations    Allocation[]
+  shipments      Shipment[]
+  movements      StockMovement[]
+  replenishments ReplenishmentPlan[]
+}
+
+model StockLevel {
+  id           String    @id @default(cuid())
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  onHand       Int       @default(0)
+  reserved     Int       @default(0)
+  reorderPoint Int       @default(0)
+
+  @@unique([warehouseId, productId])
+}
+
+enum MovementType {
+  RECEIPT
+  RESERVE
+  RELEASE
+  SHIP
+  ADJUST
+}
+
+model StockMovement {
+  id          String       @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id])
+  productId   String
+  qty         Int
+  type        MovementType
+  refType     String?
+  refId       String?
+  note        String?
+  actorId     String?
+  createdAt   DateTime     @default(now())
+
+  @@index([productId, createdAt])
+}
+
+model ReplenishmentPlan {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  qty         Int
+  eta         DateTime
+  status      String    @default("PLANNED")
+  createdAt   DateTime  @default(now())
+
+  @@index([productId, eta])
+}
+
+// ───────── Subscription catalogue: tiers, plans, entitlements ─────────
+model PlanTier {
+  id          String  @id @default(cuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  name        String
+  rank        Int
+  description String?
+  isActive    Boolean @default(true)
+
+  plans             SubscriptionPlan[]
+  entitlementValues EntitlementValue[]
+  notices           PlanChangeNotice[]
+
+  @@unique([productId, name])
+}
+
+enum ProrationRule {
+  DAILY
+  NONE
+}
+
+enum CancellationRule {
+  NONE
+  PRORATED_CREDIT
+  FULL_CREDIT
+}
+
+model SubscriptionPlan {
+  id               String            @id @default(cuid())
+  name             String
+  productId        String
+  product          Product           @relation(fields: [productId], references: [id])
+  tierId           String?
+  tier             PlanTier?         @relation(fields: [tierId], references: [id])
+  interval         RecurringInterval
+  priceMinor       Int
+  prorationRule    ProrationRule     @default(DAILY)
+  cancellationRule CancellationRule  @default(PRORATED_CREDIT)
+  isActive         Boolean           @default(true)
+
+  subscriptions  Subscription[]
+  quotationLines QuotationLine[]
+
+  @@unique([tierId, interval])
+}
+
+enum EntitlementPer {
+  DAY
+  WEEK
+  MONTH
+  CYCLE
+}
+
+enum EntitlementType {
+  INT
+  BOOL
+  TEXT
+}
+
+model EntitlementDefinition {
+  id        String          @id @default(cuid())
+  productId String
+  product   Product         @relation(fields: [productId], references: [id])
+  key       String
+  label     String
+  unit      String?
+  per       EntitlementPer  @default(CYCLE)
+  valueType EntitlementType @default(INT)
+  sortOrder Int             @default(0)
+  values    EntitlementValue[]
+
+  @@unique([productId, key])
+}
+
+model EntitlementValue {
+  id           String                @id @default(cuid())
+  definitionId String
+  definition   EntitlementDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  tierId       String
+  tier         PlanTier              @relation(fields: [tierId], references: [id])
+  interval     RecurringInterval?
+  value        Json
+  updatedById  String?
+  updatedAt    DateTime              @updatedAt
+
+  @@unique([definitionId, tierId, interval])
+}
+
+model PlanChangeNotice {
+  id             String             @id @default(cuid())
+  productId      String
+  tierId         String
+  tier           PlanTier           @relation(fields: [tierId], references: [id])
+  interval       RecurringInterval?
+  changes        Json
+  effectiveRule  String             @default("NEXT_CYCLE")
+  publishedById  String
+  publishedAt    DateTime           @default(now())
+  recipientCount Int                @default(0)
+}
+
+enum UpsellSource {
+  MANUAL
+  COPURCHASE
+}
+
+model UpsellRule {
+  id                 String       @id @default(cuid())
+  productId          String
+  product            Product      @relation("from", fields: [productId], references: [id])
+  suggestedProductId String
+  suggested          Product      @relation("to", fields: [suggestedProductId], references: [id])
+  weight             Int          @default(1)
+  source             UpsellSource @default(MANUAL)
+
+  @@unique([productId, suggestedProductId])
+}
+
+// ───────── Quotation ─────────
+enum QuotationStatus {
+  DRAFT
+  PENDING_APPROVAL
+  REVISION_REQUESTED
+  REJECTED
+  APPROVED
+  SENT
+  UNDER_NEGOTIATION
+  CONFIRMED
+  EXPIRED
+  CANCELLED
+}
+
+enum RiskBand {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Quotation {
+  id         String          @id @default(cuid())
+  number     String          @unique
+  customerId String
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  ownerId    String
+  owner      User            @relation("owner", fields: [ownerId], references: [id])
+  status     QuotationStatus @default(DRAFT)
+  version    Int             @default(1)
+  currency   String          @default("USD")
+  priceListId String?
+
+  orderDiscountBp    Int  @default(0)
+  subtotalMinor      Int  @default(0)
+  discountMinor      Int  @default(0)
+  taxMinor           Int  @default(0)
+  totalMinor         Int  @default(0)
+  oneTimeNetMinor    Int  @default(0)
+  oneTimeMarginMinor Int  @default(0)
+  recurringByCycle   Json?
+
+  riskBand        RiskBand @default(LOW)
+  requiredLevel   Int      @default(0)
+  riskMetrics     Json?
+  policyVersionId String?
+  approvedVersion Int?
+
+  portalToken           String?   @unique
+  validUntil            DateTime?
+  requestedDeliveryDate DateTime?
+  customerNote          String?
+  lastActivityAt        DateTime  @default(now())
+  sentAt                DateTime?
+  confirmedAt           DateTime?
+
+  lines       QuotationLine[]
+  versions    QuotationVersion[]
+  approvals   ApprovalRequest[]
+  messages    NegotiationMessage[]
+  acceptances QuoteAcceptance[]
+  order       Order?
+  alerts      DealHealthAlert[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, lastActivityAt])
+  @@index([ownerId, createdAt])
+}
+
+model QuotationLine {
+  id         String    @id @default(cuid())
+  quotationId String
+  quotation  Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id])
+  productName String
+  categoryId String
+  variantValueIds String[]
+  variantLabel String?
+  planId     String?
+  plan       SubscriptionPlan?  @relation(fields: [planId], references: [id])
+  interval   RecurringInterval?
+
+  qty            Int
+  unitPriceMinor Int
+  costPriceMinor Int
+  taxBp          Int
+  discountBp     Int @default(0)
+
+  baseMinor               Int @default(0)
+  lineDiscountMinor       Int @default(0)
+  orderDiscountAllocMinor Int @default(0)
+  netMinor                Int @default(0)
+  taxMinor                Int @default(0)
+  effectiveDiscountBp     Int @default(0)
+  limitBp                 Int @default(0)
+  excessBp                Int @default(0)
+  marginMinor             Int @default(0)
+
+  sortOrder       Int     @default(0)
+  addedFromUpsell Boolean @default(false)
+}
+
+model QuotationVersion {
+  id              String    @id @default(cuid())
+  quotationId     String
+  quotation       Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  version         Int
+  snapshot        Json
+  termsHash       String
+  policyVersionId String?
+  riskMetrics     Json?
+  requiredLevel   Int
+  createdById     String?
+  createdByType   String
+  reason          String
+  createdAt       DateTime  @default(now())
+
+  @@unique([quotationId, version])
+}
+
+model QuoteAcceptance {
+  id             String    @id @default(cuid())
+  quotationId    String
+  quotation      Quotation @relation(fields: [quotationId], references: [id])
+  version        Int
+  customerUserId String
+  acceptedAt     DateTime  @default(now())
+  ipAddress      String?
+
+  @@unique([quotationId, version])
+}
+
+// ───────── Approval ─────────
+enum ApprovalRole {
+  SALES_MANAGER
+  FINANCE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+  SUPERSEDED
+}
+
+enum StepStatus {
+  WAITING
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+  SUPERSEDED
+}
+
+model ApprovalRequest {
+  id               String         @id @default(cuid())
+  quotationId      String
+  quotation        Quotation      @relation(fields: [quotationId], references: [id])
+  quotationVersion Int
+  policyVersionId  String
+  requiredLevel    Int
+  riskBand         RiskBand
+  metrics          Json
+  explanation      Json
+  status           ApprovalStatus @default(PENDING)
+  currentStepIndex Int            @default(0)
+  createdAt        DateTime       @default(now())
+  decidedAt        DateTime?
+  steps            ApprovalStep[]
+
+  @@unique([quotationId, quotationVersion])
+}
+
+model ApprovalStep {
+  id          String          @id @default(cuid())
+  requestId   String
+  request     ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  index       Int
+  role        ApprovalRole
+  assigneeId  String?
+  assignee    User?           @relation("assignee", fields: [assigneeId], references: [id])
+  status      StepStatus      @default(WAITING)
+  decidedById String?
+  decidedAt   DateTime?
+  note        String?
+  dueAt       DateTime?
+
+  @@index([status, dueAt])
+}
+
+// ───────── Negotiation ─────────
+enum MessageAuthor {
+  CUSTOMER
+  INTERNAL
+  SYSTEM
+}
+
+enum ProposalStatus {
+  OPEN
+  APPLIED
+  DECLINED
+  WITHDRAWN
+}
+
+model NegotiationMessage {
+  id                    String         @id @default(cuid())
+  quotationId           String
+  quotation             Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  quotationVersion      Int
+  lineId                String?
+  author                MessageAuthor
+  authorUserId          String?
+  body                  String
+  counterDiscountBp     Int?
+  proposedQty           Int?
+  requestedDeliveryDate DateTime?
+  status                ProposalStatus @default(OPEN)
+  respondedAt           DateTime?
+  createdAt             DateTime       @default(now())
+}
+
+// ───────── Order & fulfillment ─────────
+enum OrderStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum FulfillmentStatus {
+  UNALLOCATED
+  RESERVED
+  PARTIALLY_FULFILLED
+  BACKORDERED
+  FULFILLED
+}
+
+model Order {
+  id               String            @id @default(cuid())
+  number           String            @unique
+  quotationId      String            @unique
+  quotation        Quotation         @relation(fields: [quotationId], references: [id])
+  quotationVersion Int
+  customerId       String
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  status           OrderStatus       @default(OPEN)
+  fulfillmentStatus FulfillmentStatus @default(UNALLOCATED)
+  promisedDeliveryDate DateTime?
+  currency         String
+  confirmedAt      DateTime          @default(now())
+
+  lines         OrderLine[]
+  plan          FulfillmentPlan?
+  shipments     Shipment[]
+  completions   ServiceCompletion[]
+  subscriptions Subscription[]
+  invoices      Invoice[]
+  alerts        DealHealthAlert[]
+}
+
+model OrderLine {
+  id              String      @id @default(cuid())
+  orderId         String
+  order           Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id])
+  productName     String
+  quotationLineId String
+  kind            ProductType
+  qty             Int
+  qtyShipped      Int         @default(0)
+  qtyInvoiced     Int         @default(0)
+  unitPriceMinor  Int
+  netMinor        Int
+  taxMinor        Int
+  taxBp           Int
+  costPriceMinor  Int
+  planId          String?
+  interval        RecurringInterval?
+  discountBp      Int         @default(0)
+
+  allocations   Allocation[]
+  backorders    Backorder[]
+  shipmentLines ShipmentLine[]
+  completion    ServiceCompletion?
+  subscription  Subscription?
+}
+
+enum PlanStatus {
+  SUGGESTED
+  ACCEPTED
+  OVERRIDDEN
+}
+
+model FulfillmentPlan {
+  id                 String       @id @default(cuid())
+  orderId            String       @unique
+  order              Order        @relation(fields: [orderId], references: [id])
+  status             PlanStatus   @default(SUGGESTED)
+  estimatedShipments Int
+  estimatedCostMinor Int
+  rationale          Json
+  policyVersionId    String?
+  allocations        Allocation[]
+  createdAt          DateTime     @default(now())
+  decidedAt          DateTime?
+  decidedById        String?
+}
+
+model Allocation {
+  id          String          @id @default(cuid())
+  planId      String
+  plan        FulfillmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine       @relation(fields: [orderLineId], references: [id])
+  warehouseId String
+  warehouse   Warehouse       @relation(fields: [warehouseId], references: [id])
+  qty         Int
+  qtyShipped  Int             @default(0)
+  reserved    Boolean         @default(false)
+}
+
+enum BackorderStatus {
+  OPEN
+  CONSOLIDATION_SUGGESTED
+  ALLOCATED
+  CANCELLED
+}
+
+model Backorder {
+  id                   String          @id @default(cuid())
+  orderLineId          String
+  orderLine            OrderLine       @relation(fields: [orderLineId], references: [id])
+  qty                  Int
+  status               BackorderStatus @default(OPEN)
+  suggestedWarehouseId String?
+  suggestedQty         Int?
+  createdAt            DateTime        @default(now())
+}
+
+enum ShipmentStatus {
+  PLANNED
+  SHIPPED
+}
+
+model Shipment {
+  id          String         @id @default(cuid())
+  number      String         @unique
+  orderId     String
+  order       Order          @relation(fields: [orderId], references: [id])
+  warehouseId String
+  warehouse   Warehouse      @relation(fields: [warehouseId], references: [id])
+  status      ShipmentStatus @default(PLANNED)
+  costMinor   Int            @default(0)
+  shippedAt   DateTime?
+  shippedById String?
+  lines       ShipmentLine[]
+  invoice     Invoice?
+}
+
+model ShipmentLine {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   OrderLine @relation(fields: [orderLineId], references: [id])
+  qty         Int
+}
+
+model ServiceCompletion {
+  id           String    @id @default(cuid())
+  orderId      String
+  order        Order     @relation(fields: [orderId], references: [id])
+  orderLineId  String    @unique
+  orderLine    OrderLine @relation(fields: [orderLineId], references: [id])
+  completedAt  DateTime
+  note         String?
+  recordedById String
+  invoiceId    String?
+}
+
+// ───────── Subscriptions (instances) ─────────
+enum SubscriptionStatus {
+  SCHEDULED
+  ACTIVE
+  PAUSE_SCHEDULED
+  PAUSED
+  CANCELLED
+}
+
+model Subscription {
+  id          String             @id @default(cuid())
+  orderId     String
+  order       Order              @relation(fields: [orderId], references: [id])
+  orderLineId String             @unique
+  orderLine   OrderLine          @relation(fields: [orderLineId], references: [id])
+  customerId  String
+  customer    Customer           @relation(fields: [customerId], references: [id])
+  planId      String
+  plan        SubscriptionPlan   @relation(fields: [planId], references: [id])
+  qty         Int
+  unitPriceMinor Int
+  discountBp  Int                @default(0)
+  status      SubscriptionStatus @default(SCHEDULED)
+
+  activationDate     DateTime
+  billingAnchor      DateTime
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  nextBillingDate    DateTime?
+  pauseRequestedAt   DateTime?
+  pauseEffectiveAt   DateTime?
+  resumeAt           DateTime?
+  cancelledAt        DateTime?
+  cancelEffectiveAt  DateTime?
+
+  entitlementsSnapshot Json?
+  schedule    BillingScheduleItem[]
+  transitions SubscriptionTransition[]
+  creditNotes CreditNote[]
+  createdAt   DateTime @default(now())
+
+  @@index([status, nextBillingDate])
+}
+
+enum TransitionType {
+  ACTIVATE
+  PAUSE_REQUESTED
+  PAUSE_WITHDRAWN
+  PAUSED
+  RESUME_SELECTED
+  RESUME_CHANGED
+  RESUMED
+  QTY_CHANGED
+  PLAN_CHANGED
+  CANCEL_REQUESTED
+  CANCELLED
+  PERIOD_ADVANCED
+}
+
+model SubscriptionTransition {
+  id             String         @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription   @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  type           TransitionType
+  effectiveAt    DateTime
+  actorId        String?
+  actorType      String
+  detail         Json?
+  idempotencyKey String?        @unique
+  createdAt      DateTime       @default(now())
+}
+
+enum ScheduleStatus {
+  UPCOMING
+  INVOICED
+  SKIPPED_PAUSED
+  SKIPPED_CANCELLED
+}
+
+model BillingScheduleItem {
+  id             String         @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription   @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  periodStart    DateTime
+  periodEnd      DateTime
+  amountMinor    Int
+  status         ScheduleStatus @default(UPCOMING)
+  invoiceId      String?
+  entitlements   Json?
+
+  @@unique([subscriptionId, periodStart])
+}
+
+// ───────── Billing ─────────
+enum InvoiceType {
+  ONE_TIME
+  SERVICE
+  RECURRING
+  PRORATION
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  VOID
+}
+
+model Invoice {
+  id         String        @id @default(cuid())
+  number     String        @unique
+  customerId String
+  customer   Customer      @relation(fields: [customerId], references: [id])
+  orderId    String?
+  order      Order?        @relation(fields: [orderId], references: [id])
+  shipmentId String?       @unique
+  shipment   Shipment?     @relation(fields: [shipmentId], references: [id])
+  type       InvoiceType
+  status     InvoiceStatus @default(ISSUED)
+  currency   String
+  issuedAt   DateTime      @default(now())
+  dueAt      DateTime
+  subtotalMinor      Int
+  taxMinor           Int
+  totalMinor         Int
+  paidMinor          Int @default(0)
+  creditAppliedMinor Int @default(0)
+  sourceKey  String        @unique
+
+  lines              InvoiceLine[]
+  payments           Payment[]
+  creditApplications CreditApplication[]
+
+  @@index([customerId, dueAt])
+}
+
+model InvoiceLine {
+  id             String    @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description    String
+  qty            Int
+  unitPriceMinor Int
+  amountMinor    Int
+  taxMinor       Int       @default(0)
+  orderLineId    String?
+  subscriptionId String?
+  periodStart    DateTime?
+  periodEnd      DateTime?
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+  amountMinor    Int
+  method         String
+  reference      String?
+  paidAt         DateTime @default(now())
+  recordedById   String
+  idempotencyKey String   @unique
+}
+
+model CreditNote {
+  id              String        @id @default(cuid())
+  number          String        @unique
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  subscriptionId  String?
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  sourceInvoiceId String?
+  amountMinor     Int
+  remainingMinor  Int
+  refundDueMinor  Int           @default(0)
+  reason          String
+  idempotencyKey  String        @unique
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  applications    CreditApplication[]
+}
+
+model CreditApplication {
+  id           String     @id @default(cuid())
+  creditNoteId String
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
+  invoiceId    String
+  invoice      Invoice    @relation(fields: [invoiceId], references: [id])
+  amountMinor  Int
+  appliedAt    DateTime   @default(now())
+}
+
+// ───────── Health, notifications, email, audit ─────────
+enum AlertType {
+  STALLED
+  DISCOUNT_ANOMALY
+  DELIVERY_SLIPPAGE
+  APPROVAL_SLA
+}
+
+enum AlertStatus {
+  OPEN
+  NUDGED
+  ESCALATED
+  RESOLVED
+}
+
+model DealHealthAlert {
+  id          String      @id @default(cuid())
+  type        AlertType
+  severity    RiskBand
+  quotationId String?
+  quotation   Quotation?  @relation(fields: [quotationId], references: [id])
+  orderId     String?
+  order       Order?      @relation(fields: [orderId], references: [id])
+  detail      Json
+  status      AlertStatus @default(OPEN)
+  flaggedAt   DateTime    @default(now())
+  resolvedAt  DateTime?
+  lastActionAt DateTime?
+  lastAction  String?
+
+  @@unique([type, quotationId, orderId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailMessage {
+  id          String      @id @default(cuid())
+  toEmail     String
+  toName      String?
+  subject     String
+  textBody    String
+  htmlBody    String?
+  status      EmailStatus @default(QUEUED)
+  relatedType String?
+  relatedId   String?
+  error       String?
+  attempts    Int         @default(0)
+  sentAt      DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@index([status, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorType  String
+  entityType String
+  entityId   String
+  action     String
+  version    Int?
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
