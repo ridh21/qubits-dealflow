@@ -9,12 +9,12 @@ const PAD = 5;
  * concurrent callers can never receive the same number.
  */
 export async function nextNumber(tx: Tx, key: SequenceKey): Promise<string> {
-  const rows = await tx.$queryRawUnsafe<{ next: number }[]>(
-    `INSERT INTO "NumberSequence" ("key", "next") VALUES ($1, 1001)
-     ON CONFLICT ("key") DO UPDATE SET "next" = "NumberSequence"."next" + 1
-     RETURNING "next"`,
-    key,
-  );
-  const n = rows[0].next;
+  const sequence = await tx.numberSequence.upsert({
+    where: { key },
+    create: { key, next: 1001 },
+    update: { next: { increment: 1 } },
+    select: { next: true },
+  });
+  const n = sequence.next;
   return `${key}-${String(n).padStart(PAD, "0")}`;
 }
