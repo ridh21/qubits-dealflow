@@ -7,6 +7,7 @@ import {
   type AnalyticsChart,
 } from "@/domain/analytics/charts";
 import { arAging, mrr } from "@/domain/reports/kpis";
+import { recurringPriceBasis } from "@/domain/proration/prorate";
 export async function financeCharts({
   db,
   scope,
@@ -48,6 +49,9 @@ export async function financeCharts({
       include: {
         plan: { select: { interval: true } },
         order: { select: { currency: true } },
+        orderLine: {
+          select: { qty: true, unitPriceMinor: true, netMinor: true },
+        },
       },
     }),
     db.subscriptionTransition.findMany({
@@ -281,7 +285,11 @@ export async function financeCharts({
                 (s) =>
                   s.order.currency === currency && s.plan.interval === label,
               )
-              .map((s) => ({ ...s, interval: s.plan.interval })),
+              .map((s) => ({
+                ...s,
+                interval: s.plan.interval,
+                pricingBasis: recurringPriceBasis(s.orderLine),
+              })),
           ) / 100,
       })),
     });

@@ -10,9 +10,13 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
       const customer = await db.customer.create({
         data: { name: `Analytics ${randomUUID()}` },
       });
+      const team = await db.team.create({
+        data: { name: `Analytics team ${randomUUID()}` },
+      });
       const rep = await db.user.create({
         data: {
           name: "Analytics rep",
+          teamId: team.id,
           email: `${randomUUID()}@analytics.test`,
           role: "SALES_REP",
           isActive: true,
@@ -31,6 +35,30 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
         to: "2042-09-30",
         customerId: customer.id,
       };
+      const plan = await db.subscriptionPlan.findFirstOrThrow({
+        where: { interval: "MONTHLY" },
+      });
+      const peer = await db.user.create({
+        data: {
+          name: "Team peer",
+          email: `${randomUUID()}@analytics.test`,
+          role: "SALES_REP",
+          teamId: team.id,
+          isActive: true,
+        },
+      });
+      await db.quotation.create({
+        data: {
+          number: `ANA-${randomUUID()}`,
+          customerId: customer.id,
+          ownerId: peer.id,
+          currency: "USD",
+          subtotalMinor: 30000,
+          discountMinor: 6000,
+          totalMinor: 24000,
+          createdAt: new Date("2042-09-10"),
+        },
+      });
       for (const [owner, currency] of [
         [rep, "USD"],
         [other, "EUR"],
@@ -42,6 +70,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
             ownerId: owner.id,
             currency,
             status: "CONFIRMED",
+            subtotalMinor: 10000,
+            discountMinor: 1000,
+            totalMinor: 9000,
             createdAt: new Date("2042-09-10"),
           },
         });
@@ -52,6 +83,58 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
             quotationVersion: 1,
             customerId: customer.id,
             currency,
+          },
+        });
+        const orderLine = await db.orderLine.create({
+          data: {
+            orderId: order.id,
+            quotationLineId: randomUUID(),
+            productId: plan.productId,
+            productName: "MRR fixture",
+            kind: "SUBSCRIPTION",
+            qty: 1,
+            unitPriceMinor: 1000,
+            netMinor: 1000,
+            taxMinor: 0,
+            taxBp: 0,
+            costPriceMinor: 0,
+            planId: plan.id,
+            interval: "MONTHLY",
+          },
+        });
+        await db.subscription.create({
+          data: {
+            orderId: order.id,
+            orderLineId: orderLine.id,
+            customerId: customer.id,
+            planId: plan.id,
+            qty: 2,
+            unitPriceMinor: 1000,
+            status: "ACTIVE",
+            activationDate: new Date("2042-08-01"),
+            billingAnchor: new Date("2042-08-01"),
+            transitions: {
+              create: [
+                {
+                  type: "ACTIVATE",
+                  effectiveAt: new Date("2042-08-01"),
+                  createdAt: new Date("2042-08-01"),
+                  actorType: "SYSTEM",
+                },
+                {
+                  type: "QTY_CHANGED",
+                  effectiveAt: new Date("2042-09-20"),
+                  createdAt: new Date("2042-09-20"),
+                  actorType: "USER",
+                  detail: {
+                    newQty: 2,
+                    newPriceMinor: 1000,
+                    newPlanId: plan.id,
+                    pending: false,
+                  },
+                },
+              ],
+            },
           },
         });
         const invoice = await db.invoice.create({
@@ -126,6 +209,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
           ?.rows.reduce((n, r) => n + Number(r.value), 0),
       ).toBe(1);
       expect(own.charts.some((c) => c.id === "discount-EUR")).toBe(false);
+      expect(
+        own.charts.find((c) => c.id === "discount-USD")?.reference?.value,
+      ).toBe(17.5);
+      expect(own.charts.find((c) => c.id === "discount-USD")?.rows).toEqual([
+        { label: "Analytics rep", value: 10 },
+      ]);
       const forged = await buildAnalytics(
         rep,
         { ...filters, ownerId: other.id },
@@ -143,6 +232,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
         { ...rep, role: "FINANCE" },
         { ...filters, view: "finance" },
         db,
+        new Date("2042-10-15"),
       );
       for (const currency of ["USD", "EUR"])
         expect(
@@ -158,6 +248,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
         db,
       );
       for (const currency of ["USD", "EUR"]) {
+        expect(
+          finance.charts
+            .find((c) => c.id === `mrr-history-${currency}`)
+            ?.rows.map((r) => r.value),
+        ).toEqual([20]);
         expect(
           finance.charts.find((c) => c.id === `credits-${currency}`)?.rows,
         ).toEqual([{ label: "2042-09", credit: 10, proration: 0 }]);

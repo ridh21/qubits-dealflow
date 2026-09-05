@@ -1,4 +1,5 @@
 import { prisma, type Tx } from "@/server/db";
+import { recurringPriceBasis } from "@/domain/proration/prorate";
 import type { SessionUser } from "@/server/auth/guards";
 import { parseReportFilters, reportPeriod } from "@/lib/zod-schemas/reports";
 import {
@@ -71,6 +72,9 @@ export async function buildReport(
       },
       include: {
         plan: { select: { interval: true } },
+        orderLine: {
+          select: { qty: true, unitPriceMinor: true, netMinor: true },
+        },
         order: { select: { currency: true } },
       },
     }),
@@ -134,7 +138,11 @@ export async function buildReport(
         normalisedMrrMinor: mrr(
           subscriptions
             .filter((s) => s.order.currency === currency)
-            .map((s) => ({ ...s, interval: s.plan.interval })),
+            .map((s) => ({
+              ...s,
+              interval: s.plan.interval,
+              pricingBasis: recurringPriceBasis(s.orderLine),
+            })),
         ),
         revenueTrend: bucketByPeriod(
           ins.map((i) => ({ date: i.issuedAt, value: i.totalMinor })),

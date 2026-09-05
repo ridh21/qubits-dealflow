@@ -1,5 +1,8 @@
 import Decimal from "decimal.js";
-import { periodAmount } from "@/domain/proration/prorate";
+import {
+  periodAmount,
+  type RecurringPriceBasis,
+} from "@/domain/proration/prorate";
 import type { Interval } from "@/domain/proration/period";
 const DAY = 86400000;
 export function avgApprovalHours(
@@ -149,6 +152,7 @@ export function mrr(
     unitPriceMinor: number;
     discountBp: number;
     interval: Interval;
+    pricingBasis?: RecurringPriceBasis;
   }[],
 ) {
   const factors = {
@@ -162,9 +166,9 @@ export function mrr(
     .reduce(
       (total, s) =>
         total.plus(
-          new Decimal(periodAmount(s.qty, s.unitPriceMinor, s.discountBp)).mul(
-            factors[s.interval],
-          ),
+          new Decimal(
+            periodAmount(s.qty, s.unitPriceMinor, s.discountBp, s.pricingBasis),
+          ).mul(factors[s.interval]),
         ),
       new Decimal(0),
     )
