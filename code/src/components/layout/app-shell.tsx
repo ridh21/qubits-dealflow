@@ -81,7 +81,7 @@ export function AppShell({
     <TooltipProvider>
       <WorkspaceActionsProvider>
         <SidebarProvider>
-          <Sidebar collapsible="offcanvas">
+          <Sidebar collapsible="offcanvas" role="complementary" aria-label="Workspace sidebar">
             <SidebarHeader className="gap-4 p-4">
               <div className="flex items-center justify-between gap-2">
                 <Link
@@ -105,13 +105,13 @@ export function AppShell({
                 <SidebarGroupLabel>Workspace</SidebarGroupLabel>
                 <SidebarNavigation items={nav} />
               </SidebarGroup>
+              <WorkspaceActionsSlot />
               {!portal && (
                 <SidebarGroup>
                   <SidebarGroupLabel>Configuration</SidebarGroupLabel>
                   <SidebarNavigation items={configuration} />
                 </SidebarGroup>
               )}
-              <WorkspaceActionsSlot />
             </SidebarContent>
             <SidebarFooter className="border-t p-4">
               <p className="truncate text-sm font-medium">
