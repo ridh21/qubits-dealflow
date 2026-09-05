@@ -1,0 +1,80 @@
+import type { ReportData } from "@/server/queries/reports";
+export const reportFixture: ReportData = {
+  filters: { from: "2026-09-01", to: "2026-09-30", approvalStatus: "ALL" },
+  generatedAt: new Date("2026-09-30T12:00:00Z"),
+  actorRole: "ADMIN",
+  summary: {
+    total: 43,
+    confirmed: 20,
+    rate: 20 / 43,
+    approvalHours: { overall: 12, byRole: { SALES_MANAGER: 8, FINANCE: 16 } },
+    openAlerts: 2,
+  },
+  currencies: [
+    {
+      currency: "USD",
+      revenueMinor: 1234567,
+      discountMinor: 56789,
+      cashMinor: 120000,
+      aging: { current: 10000, "0–30": 0, "31–60": 0, "61–90": 0, "90+": 0 },
+      normalisedMrrMinor: 25000,
+      revenueTrend: [],
+    },
+  ],
+  quotations: Array.from({ length: 43 }, (_, index) => ({
+    id: `q${index}`,
+    number: `Q-${1001 + index}`,
+    customer: "Acme Industries — Commercial Services Division",
+    owner: "Demo representative",
+    status: "CONFIRMED",
+    currency: "USD",
+    totalMinor: 100123,
+    discountMinor: 1000,
+    createdAt: new Date("2026-09-10"),
+  })),
+  approvals: [
+    {
+      id: "a1",
+      quotation: "Q-1001",
+      role: "FINANCE",
+      status: "APPROVED",
+      startedAt: new Date("2026-09-10"),
+      decidedAt: new Date("2026-09-11"),
+    },
+  ],
+  discounts: [
+    {
+      ownerId: "r",
+      owner: "Demo representative",
+      currency: "USD",
+      grossMinor: 4300000,
+      discountMinor: 43000,
+      discountBp: 100,
+    },
+  ],
+  upsell: [
+    {
+      productId: "p",
+      productName: "Extended care plan",
+      qty: 12,
+      netMinor: 12345,
+      currency: "USD",
+    },
+  ],
+  categories: [{ category: "Services", currency: "USD", netMinor: 30000 }],
+  invoices: [
+    {
+      id: "i1",
+      number: "INV-1001",
+      customer: "Acme Industries",
+      currency: "USD",
+      type: "ONE_TIME",
+      issuedAt: new Date("2026-09-11"),
+      dueAt: new Date("2026-09-30"),
+      totalMinor: 1234567,
+      paidMinor: 120000,
+      creditAppliedMinor: 10000,
+      balanceMinor: 1104567,
+    },
+  ],
+};
