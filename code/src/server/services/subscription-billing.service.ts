@@ -77,6 +77,22 @@ export async function regenerateSchedule(tx: Tx, id: string) {
     sub.currentPeriodEnd ??
     sub.cancelEffectiveAt ??
     sub.activationDate;
+  const pending = await tx.subscriptionTransition.findMany({
+    where: {
+      subscriptionId: id,
+      type: { in: ["QTY_CHANGED", "PLAN_CHANGED"] },
+      detail: { path: ["pending"], equals: true },
+    },
+    // Match billing-job ordering when more than one decision shares a boundary.
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const applied = new Set<string>();
+  const projected = {
+    qty: sub.qty,
+    unitPriceMinor: sub.unitPriceMinor,
+    plan: sub.plan,
+    billingAnchor: sub.billingAnchor,
+  };
   const items: Prisma.BillingScheduleItemCreateManyInput[] = [];
   await tx.billingScheduleItem.deleteMany({
     where: {
@@ -85,11 +101,6 @@ export async function regenerateSchedule(tx: Tx, id: string) {
     },
   });
   for (let i = 0; i < policy.payload.scheduleHorizonPeriods; i++) {
-    const end = periodEnd(
-      sub.plan.interval,
-      start,
-      sub.billingAnchor.getUTCDate(),
-    );
     const status =
       sub.status === "CANCELLED" ||
       (sub.cancelEffectiveAt && start >= sub.cancelEffectiveAt)
@@ -99,11 +110,35 @@ export async function regenerateSchedule(tx: Tx, id: string) {
             (!sub.resumeAt || start < sub.resumeAt)
           ? "SKIPPED_PAUSED"
           : "UPCOMING";
+    // NONE changes take effect at the first billable boundary, not in the
+    // current period or during skipped periods. Keep this projection read-only.
+    if (status === "UPCOMING") {
+      for (const change of pending) {
+        if (applied.has(change.id) || change.effectiveAt > start) continue;
+        const detail = change.detail as Record<string, unknown>;
+        projected.qty = Number(detail.newQty);
+        projected.unitPriceMinor = Number(detail.newPriceMinor);
+        projected.plan = await tx.subscriptionPlan.findUniqueOrThrow({
+          where: { id: String(detail.newPlanId) },
+        });
+        if (detail.differentCycle) projected.billingAnchor = start;
+        applied.add(change.id);
+      }
+    }
+    const end = periodEnd(
+      projected.plan.interval,
+      start,
+      projected.billingAnchor.getUTCDate(),
+    );
     items.push({
       subscriptionId: id,
       periodStart: start,
       periodEnd: end,
-      amountMinor: periodAmount(sub.qty, sub.unitPriceMinor, sub.discountBp),
+      amountMinor: periodAmount(
+        projected.qty,
+        projected.unitPriceMinor,
+        sub.discountBp,
+      ),
       status,
     });
     start = end;
@@ -161,6 +196,7 @@ export async function issuePeriod(tx: Tx, id: string, start: Date) {
       entitlements,
     },
     update: {
+      periodEnd: end,
       status: "INVOICED",
       invoiceId: invoice.id,
       entitlements,

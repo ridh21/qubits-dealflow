@@ -191,4 +191,63 @@ describe.skipIf(!suppliedUrl)("subscription cycle changes in an isolated schema"
     await billing.changeSubscription(actor, f.sub.id, input, changeAt);
     expect((await savedSchedule(f.sub.id)).status).toBe("INVOICED");
   }, 120_000);
+  it("projects NONE changes at the boundary and invoices that exact period once", async () => {
+    const f = await fixture(5, 20, 12000, "NONE");
+    const input = { newPlanId: f.newPlan.id, newQty: 2, idempotencyKey: randomUUID() };
+    const first = await billing.changeSubscription(actor, f.sub.id, input, changeAt);
+    // A later pending decision at the same boundary wins, just as it does in billing.
+    const latestInput = { ...input, newQty: 3, idempotencyKey: randomUUID() };
+    const latest = await billing.changeSubscription(actor, f.sub.id, latestInput, new Date("2035-09-17T00:00:00Z"));
+    const end = new Date("2036-10-01T00:00:00Z");
+    const projected = await savedSchedule(f.sub.id, oldEnd);
+    expect(projected).toMatchObject({
+      periodStart: oldEnd, periodEnd: end, amountMinor: 36000, status: "UPCOMING", invoiceId: null,
+    });
+    expect((await savedSchedule(f.sub.id, end)).periodEnd).toEqual(new Date("2037-10-01T00:00:00Z"));
+    expect(await db.subscription.findUniqueOrThrow({ where: { id: f.sub.id } })).toEqual(f.sub);
+    expect(await savedSchedule(f.sub.id, start)).toEqual(f.originalSchedule);
+    expect(await db.invoice.count({ where: { orderId: f.sub.orderId } })).toBe(1);
+    expect(await db.creditNote.count({ where: { subscriptionId: f.sub.id } })).toBe(0);
+    expect((await portal.getMySubscription(f.buyer, f.sub.id)).entitlements[0].value).toBe("5");
+    expect(await billing.changeSubscription(actor, f.sub.id, latestInput, changeAt)).toEqual(latest);
+    expect(await savedSchedule(f.sub.id, oldEnd)).toEqual(projected);
+
+    // Emulate an already-stored projection from before this fix: upsert must repair its end.
+    await db.billingScheduleItem.update({ where: { id: projected.id }, data: { periodEnd: new Date("2035-11-01T00:00:00Z") } });
+    const { runBilling } = await import("@/server/services/billing-job");
+    expect(await runBilling(new Date("2035-09-30T00:00:00Z"))).toMatchObject({ invoices: 0, failed: [] });
+    // The earlier run regenerates projections; restore the legacy end to exercise issuePeriod's update branch.
+    const beforeBoundary = await savedSchedule(f.sub.id, oldEnd);
+    await db.billingScheduleItem.update({ where: { id: beforeBoundary.id }, data: { periodEnd: new Date("2035-11-01T00:00:00Z") } });
+    expect(await runBilling(oldEnd)).toMatchObject({ invoices: 1, failed: [] });
+    const sub = await db.subscription.findUniqueOrThrow({ where: { id: f.sub.id } });
+    const schedule = await savedSchedule(f.sub.id, oldEnd);
+    const invoice = await db.invoice.findUniqueOrThrow({
+      where: { sourceKey: `SUB:${sub.id}:${oldEnd.toISOString()}` }, include: { lines: true },
+    });
+    expect(sub).toMatchObject({
+      planId: f.newPlan.id, qty: 3, unitPriceMinor: 12000, billingAnchor: oldEnd,
+      currentPeriodStart: oldEnd, currentPeriodEnd: end, nextBillingDate: end,
+      entitlementsSnapshot: { photos_per_day: { value: 20, source: "OVERRIDE" } },
+    });
+    expect(schedule).toMatchObject({
+      id: beforeBoundary.id, status: "INVOICED", periodStart: oldEnd, periodEnd: end,
+      invoiceId: invoice.id, amountMinor: 36000, entitlements: sub.entitlementsSnapshot,
+    });
+    expect(invoice).toMatchObject({ type: "RECURRING", subtotalMinor: 36000, taxMinor: 3600, totalMinor: 39600 });
+    expect(invoice.lines).toHaveLength(1);
+    expect(invoice.lines[0]).toMatchObject({ subscriptionId: sub.id, qty: 3, periodStart: oldEnd, periodEnd: end });
+    const publicView = await portal.getMySubscription(f.buyer, sub.id);
+    expect(publicView.entitlements[0].value).toBe("20");
+    expect(publicView.subscription.schedule.find((row) => row.id === schedule.id)).toMatchObject({ periodEnd: end, invoiceId: invoice.id });
+    for (const change of [first, latest])
+      expect((await db.subscriptionTransition.findUniqueOrThrow({ where: { id: change.id } })).detail).toMatchObject({ pending: false });
+    expect(await runBilling(oldEnd)).toMatchObject({ invoices: 0, failed: [] });
+    expect(await billing.changeSubscription(actor, sub.id, latestInput, changeAt)).toMatchObject({ id: latest.id });
+    expect(await savedSchedule(sub.id, oldEnd)).toEqual(schedule);
+    expect(await savedSchedule(sub.id, start)).toEqual(f.originalSchedule);
+    expect(await db.invoice.count({ where: { orderId: sub.orderId } })).toBe(2);
+    expect(await db.invoice.count({ where: { orderId: sub.orderId, type: "PRORATION" } })).toBe(0);
+  }, 180_000);
+
 });
