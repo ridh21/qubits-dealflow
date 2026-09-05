@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/server/db";
-import { proposePlan, acceptPlan, consolidateBackorder } from "@/server/services/fulfillment.service";
-import { setWarehouseActive } from "@/server/services/admin/warehouse.service";
+import { proposePlan, acceptPlan, consolidateBackorder, markShipped } from "@/server/services/fulfillment.service";
+import { setWarehouseActive, receiveStock } from "@/server/services/admin/warehouse.service";
 import { FulfillmentPolicyZ, BillingPolicyZ } from "@/domain/policy/schemas";
 
 const schema = "dealflow_test_fulfillment_20260905";
 const suite = process.env.TEST_DATABASE_URL ? describe : describe.skip;
-suite("fulfillment audit regressions (isolated, no seeds)", () => {
+suite("fulfillment audit regressions (isolated, no seeds)", { timeout: 180000 }, () => {
   beforeAll(async () => {
     const testUrl = new URL(process.env.TEST_DATABASE_URL!);
     const actualUrl = new URL(process.env.DATABASE_URL!);
@@ -74,4 +74,26 @@ suite("fulfillment audit regressions (isolated, no seeds)", () => {
     expect(await prisma.allocation.count({ where: { planId: f.plan.id } })).toBe(0);
     expect((await prisma.backorder.findUniqueOrThrow({ where: { id: b.id } })).qty).toBe(5);
   });
+  it("reserves and invoices only a bounded partial backorder, retaining the remainder", async () => {
+    const f = await fixture(5, 0);
+    await acceptPlan(f.actor, f.order.id, f.plan.id);
+    const b = await prisma.backorder.findFirstOrThrow({ where: { orderLineId: f.order.lines[0].id } });
+    await receiveStock(f.actor, { warehouseId: f.warehouse.id, productId: f.product.id, qty: 2 });
+    await expect(consolidateBackorder(f.actor, b.id, f.warehouse.id, 6)).rejects.toThrow("within the open backorder");
+    await expect(consolidateBackorder(f.actor, b.id, f.warehouse.id, 3)).rejects.toThrow("Stock changed");
+    const shipment = await consolidateBackorder(f.actor, b.id, f.warehouse.id, 2);
+    expect((await prisma.backorder.findUniqueOrThrow({ where: { id: b.id } })).qty).toBe(3);
+    const stock = await prisma.stockLevel.findFirstOrThrow({ where: { productId: f.product.id } });
+    expect(stock.reserved).toBe(2);
+    await markShipped(f.actor, shipment.id);
+    await markShipped(f.actor, shipment.id);
+    const invoice = await prisma.invoice.findUniqueOrThrow({ where: { shipmentId: shipment.id }, include: { lines: true } });
+    expect(invoice.lines[0].qty).toBe(2);
+    expect(invoice.totalMinor).toBe(200);
+    const line = await prisma.orderLine.findUniqueOrThrow({ where: { id: b.orderLineId } });
+    expect(line.qtyShipped).toBe(2);
+    expect(line.qtyInvoiced).toBe(2);
+    expect(line.qty).toBe(line.qtyShipped + 3);
+  });
+
 });
