@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { withTx, lockRow } from "@/server/db";
 import { writeAudit } from "@/server/audit";
+import { settleInvoiceTotals } from "./invoice-settlement";
 import type { SessionUser } from "@/server/auth/guards";
 import { Conflict, Forbidden, ValidationError } from "@/domain/errors";
 import { completeOrderIfDone } from "./order.service";
@@ -50,6 +51,7 @@ export async function recordPayment(
       where: { id: invoice.id },
       data: { paidMinor: { increment: input.amountMinor } },
     });
+    await settleInvoiceTotals(tx, invoice.id);
     await writeAudit(tx, {
       actorId: actor.id,
       actorType: "USER",

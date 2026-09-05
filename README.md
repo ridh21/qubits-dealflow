@@ -21,6 +21,35 @@ Open http://localhost:3000. SMTP settings are required for delivered email; job 
 
 `pnpm db:seed` populates the INR/GST demo scenarios. It replaces records owned by the demo seed, so use it against a development or demo database.
 
+## Local database (Docker)
+
+A local Postgres 16 instance replaces the hosted Neon database for development.
+Two commands get a fully seeded database:
+
+```bash
+pnpm db:up      # starts the postgres container and waits until healthy
+pnpm db:setup   # applies prisma migrations + runs prisma/seed.ts
+```
+
+`pnpm db:setup` runs `prisma migrate deploy && tsx prisma/seed.ts`; the seed is
+idempotent (demo rows are purged and recreated), so it can be re-run any time —
+or run the seed alone with `pnpm db:seed`. Then start the app as usual with
+`pnpm dev`.
+
+The database listens on `127.0.0.1:55432` (user `dealflow`, password
+`dealflow_dev`, database `dealflow_dev`) — this is already configured in
+`.env`. Data is stored in the `dealflow_pgdata` docker volume and survives
+restarts; `pnpm db:down` stops the container, and `docker compose -f
+compose.dev.yml down -v` also wipes the data.
+
+Other useful commands:
+
+- `pnpm db:seed` — run `prisma/seed.ts` directly against the running database
+- `pnpm db:studio` — browse the local data with Prisma Studio
+- `pnpm db:migrate` — create a new migration against the local database
+
+To switch back to Neon, uncomment the Neon URLs at the top of `.env`.
+
 ## Validation
 
 ```sh

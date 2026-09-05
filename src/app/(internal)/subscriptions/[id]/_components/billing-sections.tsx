@@ -24,7 +24,7 @@ export function Schedule({
       description="Amounts exclude tax. Paused and cancelled periods are skipped."
     >
       <div className="rounded-xl border">
-        <Table>
+        <Table containerClassName="rounded-none border-0">
           <TableHeader>
             <TableRow>
               {["Period (UTC)", "Amount", "Status", "Invoice"].map((h) => (
@@ -102,7 +102,7 @@ export function OrderBilling({
                   ? "Service lines"
                   : "Recurring lines"}
             </h3>
-            <Table>
+            <Table containerClassName="rounded-none border-0">
               <TableHeader>
                 <TableRow>
                   {["Product", "Quantity", "Progress / plan", "Invoices"].map(

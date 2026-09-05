@@ -31,7 +31,10 @@ export default async function ProductDetail({ params }: PageProps<"/admin/produc
   });
   if (!product) notFound();
 
-  const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
+  const categories = await prisma.category.findMany({
+    select: { id: true, name: true },
+    orderBy: { sortOrder: "asc" },
+  });
   const priceLists = await prisma.priceList.findMany({
     where: { isActive: true },
     include: { items: { where: { productId: id } } },
@@ -130,7 +133,7 @@ export default async function ProductDetail({ params }: PageProps<"/admin/produc
         <TabsContent value="price-lists" className="pt-4">
           <Card className="shadow-none">
             <CardContent className="p-0">
-              <Table>
+              <Table containerClassName="rounded-none border-0">
                 <TableHeader className="bg-muted/40">
                   <TableRow>
                     <TableHead>Price list</TableHead>
@@ -188,7 +191,7 @@ export default async function ProductDetail({ params }: PageProps<"/admin/produc
                   {product.type === "SERVICE" ? "Services" : "Subscriptions"} never consume stock.
                 </p>
               ) : (
-                <Table>
+                <Table containerClassName="rounded-none border-0">
                   <TableHeader className="bg-muted/40">
                     <TableRow>
                       <TableHead>Warehouse</TableHead>

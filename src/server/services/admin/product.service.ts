@@ -116,7 +116,10 @@ export async function setVariants(actor: SessionUser, input: z.infer<typeof SetV
   if (!product) throw new NotFound("That product no longer exists.");
 
   return withTx(async (tx) => {
-    await tx.variantAttribute.deleteMany({ where: { productId: input.productId } });
+    await tx.variantAttribute.updateMany({
+      where: { productId: input.productId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
     for (const attr of input.attributes) {
       await tx.variantAttribute.create({
         data: {

@@ -74,7 +74,8 @@ export function SidebarNavigation({ items }: { items: NavItem[] }) {
           : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <SidebarMenuItem key={item.href}>
-            <SidebarMenuButton asChild isActive={active}>
+            {/* The label is the only affordance left once the rail collapses. */}
+            <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}

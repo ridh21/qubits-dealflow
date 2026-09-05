@@ -22,7 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CurrencySelect } from "@/components/forms/currency-select";
 import { Pencil, Plus } from "@/components/icons";
+import { DEFAULT_CURRENCY } from "@/domain/money/money";
 import { createPriceListAction, updatePriceListAction } from "@/server/actions/admin";
 
 const ANY_TIER = "__any__";
@@ -38,7 +40,7 @@ export interface PriceListValues {
 
 const EMPTY: PriceListValues = {
   name: "",
-  currency: "USD",
+  currency: DEFAULT_CURRENCY,
   tier: ANY_TIER,
   rule: "NO_ADJUSTMENT",
   percentOff: "0",
@@ -103,11 +105,10 @@ export function PriceListFormDialog({ list }: { list?: PriceListValues }) {
 
           <div className="space-y-2">
             <Label htmlFor="pl-currency">Currency</Label>
-            <Input
+            <CurrencySelect
               id="pl-currency"
-              maxLength={3}
               value={values.currency}
-              onChange={(e) => set("currency", e.target.value)}
+              onChange={(v) => set("currency", v)}
             />
           </div>
 

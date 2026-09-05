@@ -17,7 +17,7 @@ export {
   ClockCounterClockwise,
   Columns,
   Cube,
-  CurrencyDollar,
+  CurrencyInr,
   DotsThree,
   Envelope,
   FileText,

@@ -70,7 +70,9 @@ export async function upsertPriceListItem(
       where: {
         priceListId_productId: { priceListId: input.priceListId, productId: input.productId },
       },
-      update: { priceMinor: input.priceMinor },
+      // Re-adding a removed product revives its row, which is what keeps the
+      // (priceListId, productId) unique satisfied after a soft delete.
+      update: { priceMinor: input.priceMinor, deletedAt: null },
       create: input,
     });
     const list = await tx.priceList.update({
@@ -95,7 +97,10 @@ export async function removePriceListItem(actor: SessionUser, itemId: string) {
   if (!item) throw new NotFound("That price already went away.");
 
   return withTx(async (tx) => {
-    await tx.priceListItem.delete({ where: { id: itemId } });
+    await tx.priceListItem.update({
+      where: { id: itemId },
+      data: { deletedAt: new Date() },
+    });
     const list = await tx.priceList.update({
       where: { id: item.priceListId },
       data: { version: { increment: 1 } },

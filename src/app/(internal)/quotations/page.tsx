@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table/data-table";
 import { Pagination } from "@/components/data-table/pagination";
-import { Columns, ListChecks, Plus } from "@/components/icons";
+import { Columns, ListChecks } from "@/components/icons";
 import { formatMinor } from "@/domain/money/money";
 import { QuotationListFilters } from "./_components/quotation-list-filters";
 import { QuotationListBoard } from "./_components/quotation-list-board";
+import { NewQuotationButton } from "./_components/new-quotation-button";
 
 export default async function QuotationsPage({
   searchParams,
@@ -27,14 +28,7 @@ export default async function QuotationsPage({
         description="Build terms, track reviews and follow customer decisions."
       />
       <WorkspaceActions>
-        {p.actor.role !== "FINANCE" && (
-          <Button asChild>
-            <Link href="/quotations/new">
-              <Plus className="size-4" />
-              New quotation
-            </Link>
-          </Button>
-        )}
+        {p.actor.role !== "FINANCE" && <NewQuotationButton />}
         <Button variant="outline" asChild>
           <Link
             href={quotationListHref(sp, {

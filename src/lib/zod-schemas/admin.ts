@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { csvArray } from "./list";
+import { DEFAULT_CURRENCY } from "@/domain/money/money";
 
 export const RoleEnum = z.enum(["PENDING", "ADMIN", "SALES_REP", "SALES_MANAGER", "FINANCE", "CUSTOMER"]);
 export const TierEnum = z.enum(["BRONZE", "SILVER", "GOLD"]);
@@ -107,7 +108,7 @@ export const SetVariantsInput = z.object({
 
 export const PriceListInput = z.object({
   name: z.string().min(2, "Name the price list."),
-  currency: z.string().length(3).default("USD"),
+  currency: z.string().length(3).default(DEFAULT_CURRENCY),
   tier: TierEnum.optional().or(z.literal("")),
   rule: PriceRuleEnum.default("NO_ADJUSTMENT"),
   percentOffBp: z.coerce.number().int().min(0).max(10000).default(0),

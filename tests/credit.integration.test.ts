@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { PrismaClient, type Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
+import { softDeleteExtension } from "@/server/soft-delete";
+import type { DbClient, Tx } from "@/server/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // No shared seed or default datasource: create and drop only our own schema.
 const suppliedUrl = process.env.TEST_DATABASE_URL;
 const schema = `test_credit_${randomUUID().replaceAll("-", "")}`;
-let db: PrismaClient;
+let db: DbClient;
 let created = false;
 let service: typeof import("@/server/services/credit.service");
 let previousDatabaseUrl: string | undefined;
@@ -27,7 +29,7 @@ function executeSql(sql: string) {
   // Do not include CLI output: connection failures can contain credentials.
   return result.status === 0;
 }
-const transact = <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) =>
+const transact = <T>(fn: (tx: Tx) => Promise<T>) =>
   db.$transaction(fn, { timeout: 60_000 });
 const customer = (currency = "USD") => db.customer.create({
   data: { name: `Credit test ${randomUUID()}`, currency },
@@ -84,7 +86,7 @@ describe.skipIf(!suppliedUrl)("credit currency integration (isolated schema)", (
     url.searchParams.set("schema", schema);
     previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = url.toString();
-    db = new PrismaClient({ datasources: { db: { url: url.toString() } } });
+    db = new PrismaClient({ datasources: { db: { url: url.toString() } } }).$extends(softDeleteExtension);
     await db.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
     created = true;
     if (!executeSql(readFileSync("prisma/migrations/20260905063031_init/migration.sql", "utf8")))

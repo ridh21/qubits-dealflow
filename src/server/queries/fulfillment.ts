@@ -1,15 +1,68 @@
+import { z } from "zod";
+import type { Prisma } from "@prisma/client";
+import {
+  orderByOf,
+  paginate,
+  parseListParams,
+  type SearchParamsRecord,
+} from "@/server/list";
 import { prisma } from "@/server/db";
 import { requireInternal } from "@/server/auth/guards";
 import { quotationScope } from "./quotations";
 import { NotFound } from "@/domain/errors";
-export async function listFulfillment() {
+const FulfillmentFilters = z.object({
+  fulfillmentStatus: z
+    .enum([
+      "UNALLOCATED",
+      "RESERVED",
+      "PARTIALLY_FULFILLED",
+      "BACKORDERED",
+      "FULFILLED",
+    ])
+    .optional(),
+  status: z.enum(["OPEN", "COMPLETED", "CANCELLED"]).optional(),
+});
+
+export async function listFulfillment(sp: SearchParamsRecord) {
   const actor = await requireInternal();
-  return prisma.order.findMany({
-    where: { quotation: quotationScope(actor) },
-    include: { customer: { select: { name: true } }, lines: true },
-    orderBy: { confirmedAt: "desc" },
-    take: 100,
-  });
+  const p = parseListParams(sp, FulfillmentFilters);
+
+  const where: Prisma.OrderWhereInput = {
+    quotation: quotationScope(actor),
+    ...(p.filters.fulfillmentStatus
+      ? { fulfillmentStatus: p.filters.fulfillmentStatus }
+      : {}),
+    ...(p.filters.status ? { status: p.filters.status } : {}),
+    ...(p.q
+      ? {
+          OR: [
+            { number: { contains: p.q, mode: "insensitive" } },
+            { customer: { name: { contains: p.q, mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+
+  const orderBy = orderByOf(
+    p.sort,
+    p.dir,
+    ["number", "confirmedAt", "promisedDeliveryDate", "fulfillmentStatus"],
+    { confirmedAt: "desc" },
+  );
+
+  const result = await paginate(
+    () => prisma.order.count({ where }),
+    (skip, take) =>
+      prisma.order.findMany({
+        where,
+        orderBy,
+        skip,
+        take,
+        include: { customer: { select: { name: true } }, lines: true },
+      }),
+    p,
+  );
+  return { ...result, params: p };
 }
 export async function getFulfillment(id: string) {
   const actor = await requireInternal();

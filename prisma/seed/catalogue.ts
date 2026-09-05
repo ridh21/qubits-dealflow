@@ -1,4 +1,5 @@
-import { PrismaClient, type ProductType } from "@prisma/client";
+import { type ProductType } from "@prisma/client";
+import type { DbClient } from "@/server/db";
 
 interface SeedProduct {
   sku: string;
@@ -158,7 +159,7 @@ const VARIANTS: Record<string, { name: string; values: { value: string; extraPri
   ],
 };
 
-export async function seedCatalogue(prisma: PrismaClient) {
+export async function seedCatalogue(prisma: DbClient) {
   const categoryIds = new Map<string, string>();
   for (const [i, name] of CATEGORIES.entries()) {
     const c = await prisma.category.upsert({

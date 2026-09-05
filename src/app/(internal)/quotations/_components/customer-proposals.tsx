@@ -19,7 +19,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Check, X, Envelope } from "@/components/icons";
+import { Check, X, Envelope, WarningCircle } from "@/components/icons";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import {
   respondToProposalAction,
   sendToCustomerAction,
@@ -95,11 +104,19 @@ export function CustomerProposals({
           </Button>
         </WorkspaceActions>
       )}
+      {/* A select plus two decisions is a form, not a toolbar button, so it
+          lives in the page beside the conversation it acts on. */}
       {canRespond && activeMessage && (
-        <WorkspaceActions>
-          <label htmlFor="proposal-response" className="text-xs font-medium">
-            Customer request
-          </label>
+        <Card>
+          <CardHeader>
+            <CardTitle>Respond to customer request</CardTitle>
+            <CardDescription>
+              Review the request against current version {version} before
+              applying it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+          <Label htmlFor="proposal-response">Customer request</Label>
           <Select value={activeMessage.id} onValueChange={setProposalId}>
             <SelectTrigger id="proposal-response" className="w-full">
               <SelectValue />
@@ -112,10 +129,7 @@ export function CustomerProposals({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Review the request against current version {version} before applying
-            it.
-          </p>
+          <div className="flex flex-wrap gap-2">
           <Button
             disabled={
               pending || !["SENT", "UNDER_NEGOTIATION"].includes(status)
@@ -149,16 +163,25 @@ export function CustomerProposals({
             <X />
             Decline request
           </Button>
-        </WorkspaceActions>
+          </div>
+          </CardContent>
+        </Card>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error ? (
+        <Alert variant="destructive">
+          <WarningCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
       {messages.length > 0 && (
-        <section className="space-y-4 rounded-xl border p-6">
-          <h2 className="text-lg font-semibold">Customer conversation</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer conversation</CardTitle>
+            <CardDescription>
+              {messages.length} {messages.length === 1 ? "message" : "messages"} across versions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
           {messages.map((message) => (
             <article
               key={message.id}
@@ -187,7 +210,8 @@ export function CustomerProposals({
               )}
             </article>
           ))}
-        </section>
+          </CardContent>
+        </Card>
       )}
       <Dialog
         open={!!selected}

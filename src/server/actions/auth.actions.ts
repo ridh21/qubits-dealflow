@@ -3,10 +3,10 @@
 import { AuthError } from "next-auth";
 import { LoginInput, SignupInput, PortalLoginInput } from "@/lib/zod-schemas/auth";
 import { signupInternalUser } from "@/server/services/auth.service";
-import { internalSignIn, internalSignOut, portalSignIn, portalSignOut } from "@/server/auth";
+import { internalSignIn, internalSignOut, portalSignOut } from "@/server/auth";
 import { issuePortalLink } from "@/server/auth/portal-links";
 import { toActionError, type ActionResult } from "@/domain/errors";
-import { sendQueuedEmails } from "@/server/email/outbox";
+import { sendQueuedEmail } from "@/server/email/outbox";
 
 export async function signupAction(
   _prev: unknown,
@@ -66,7 +66,7 @@ export async function logoutAction() {
 export async function requestPortalLinkAction(
   _prev: unknown,
   formData: FormData,
-): Promise<ActionResult<{ devLink: string | null }>> {
+): Promise<ActionResult<{ delivered: boolean }>> {
   const parsed = PortalLoginInput.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return {
@@ -76,25 +76,19 @@ export async function requestPortalLinkAction(
   }
   try {
     const result = await issuePortalLink(parsed.data.email);
-    // Deliver immediately so the customer is not waiting on the outbox job.
-    await sendQueuedEmails(5);
-    return { ok: true, data: { devLink: result.devLink } };
+    // Send only this message. Draining the outbox here would make one
+    // unreachable address delay every other customer's sign-in.
+    const delivered = result.messageId
+      ? await sendQueuedEmail(result.messageId)
+      : false;
+    return { ok: true, data: { delivered } };
   } catch (e) {
     return toActionError(e);
   }
 }
 
-export async function verifyPortalTokenAction(token: string): Promise<ActionResult<null>> {
-  try {
-    await portalSignIn("portal-link", { token, redirect: false });
-    return { ok: true, data: null };
-  } catch {
-    return {
-      ok: false,
-      error: { code: "FORBIDDEN", message: "That link has expired. Request a new one." },
-    };
-  }
-}
+// Magic-link verification lives in the /portal/login/verify route handler:
+// signing in writes a cookie, which a Server Component render cannot do.
 
 export async function portalLogoutAction() {
   await portalSignOut({ redirectTo: "/portal/login" });

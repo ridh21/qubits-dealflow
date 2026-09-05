@@ -20,6 +20,16 @@ export async function createQuoteAction(input: unknown) {
     paths,
   });
 }
+/** One-click draft: no input, so there is no schema to validate. */
+export async function startDraftQuoteAction() {
+  return runAction({
+    roles,
+    schema: z.object({}),
+    input: {},
+    execute: (actor) => service.startDraftQuotation(actor),
+    paths,
+  });
+}
 export async function addQuoteLineAction(input: unknown) {
   return runAction({
     roles,

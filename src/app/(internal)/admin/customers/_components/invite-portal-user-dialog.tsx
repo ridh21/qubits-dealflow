@@ -29,9 +29,11 @@ export function InvitePortalUserDialog({ customerId }: { customerId: string }) {
     startTransition(async () => {
       const result = await invitePortalUserAction({ customerId, name, email });
       if (result.ok) {
-        toast.success("Invitation sent.", {
-          description: result.data.devLink ? "Dev sign-in link logged in the outbox." : undefined,
-        });
+        toast.success(
+          result.data.delivered
+            ? "Invitation emailed."
+            : "Invitation queued — it will be retried shortly.",
+        );
         setName("");
         setEmail("");
         setOpen(false);

@@ -4,7 +4,7 @@ import { writeAudit } from "@/server/audit";
 import { NotFound, ValidationError } from "@/domain/errors";
 import { CustomerInput, InvitePortalUserInput } from "@/lib/zod-schemas/admin";
 import { issuePortalLink } from "@/server/auth/portal-links";
-import { sendQueuedEmails } from "@/server/email/outbox";
+import { sendQueuedEmail } from "@/server/email/outbox";
 import type { SessionUser } from "@/server/auth/guards";
 
 type Input = z.infer<typeof CustomerInput>;
@@ -106,6 +106,10 @@ export async function invitePortalUser(
   });
 
   const link = await issuePortalLink(email);
-  await sendQueuedEmails(5);
-  return { user, devLink: link.devLink };
+  // Only the invite we just queued, so an unrelated stuck message cannot make
+  // the admin think the invitation failed.
+  const delivered = link.messageId
+    ? await sendQueuedEmail(link.messageId)
+    : false;
+  return { user, delivered };
 }

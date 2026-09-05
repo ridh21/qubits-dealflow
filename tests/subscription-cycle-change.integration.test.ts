@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
-import { PrismaClient, type Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
+import { softDeleteExtension } from "@/server/soft-delete";
+import type { DbClient, Tx } from "@/server/db";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SessionUser } from "@/server/auth/guards";
 
@@ -9,8 +11,8 @@ import type { SessionUser } from "@/server/auth/guards";
 vi.mock("@/server/auth/guards", () => ({ requirePortalCustomer: vi.fn() }));
 const suppliedUrl = process.env.TEST_DATABASE_URL;
 const schema = `test_cycle_${randomUUID().replaceAll("-", "")}`;
-let db: PrismaClient;
-let bootstrap: PrismaClient;
+let db: DbClient;
+let bootstrap: DbClient;
 let created = false;
 let previousUrl: string | undefined;
 let actor: SessionUser;
@@ -21,7 +23,7 @@ const start = new Date("2035-09-01T00:00:00Z");
 const oldEnd = new Date("2035-10-01T00:00:00Z");
 const changeAt = new Date("2035-09-16T00:00:00Z");
 const newEnd = new Date("2036-09-16T00:00:00Z");
-const tx = <T>(fn: (client: Prisma.TransactionClient) => Promise<T>) =>
+const tx = <T>(fn: (client: Tx) => Promise<T>) =>
   db.$transaction(fn, { timeout: 60_000 });
 
 async function fixture(oldValue = 5, newValue = 20, newPrice = 12000, rule: "DAILY" | "NONE" = "DAILY") {
@@ -91,7 +93,7 @@ describe.skipIf(!suppliedUrl)("subscription cycle changes in an isolated schema"
     url.searchParams.set("schema", schema);
     previousUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = url.toString();
-    bootstrap = new PrismaClient({ datasources: { db: { url: url.toString() } } });
+    bootstrap = new PrismaClient({ datasources: { db: { url: url.toString() } } }).$extends(softDeleteExtension);
     await bootstrap.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
     created = true;
     // Separate test schemas need no shared migration advisory lock or ledger.

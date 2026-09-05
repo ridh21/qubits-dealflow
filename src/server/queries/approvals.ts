@@ -1,18 +1,63 @@
+import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { requireInternal } from "@/server/auth/guards";
 import { quotationScope } from "./quotations";
 import { NotFound } from "@/domain/errors";
-export async function listApprovals() {
+import {
+  orderByOf,
+  paginate,
+  parseListParams,
+  type SearchParamsRecord,
+} from "@/server/list";
+
+const ApprovalFilters = z.object({
+  status: z
+    .enum(["PENDING", "APPROVED", "REJECTED", "RETURNED", "SUPERSEDED"])
+    .optional(),
+  riskBand: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+});
+
+export async function listApprovals(sp: SearchParamsRecord) {
   const actor = await requireInternal();
-  return prisma.approvalRequest.findMany({
-    where: { quotation: quotationScope(actor) },
-    include: {
-      quotation: { include: { customer: { select: { name: true } } } },
-      steps: { orderBy: { index: "asc" } },
+  const p = parseListParams(sp, ApprovalFilters);
+
+  const where: Prisma.ApprovalRequestWhereInput = {
+    quotation: {
+      ...quotationScope(actor),
+      ...(p.q
+        ? {
+            OR: [
+              { number: { contains: p.q, mode: "insensitive" } },
+              { customer: { name: { contains: p.q, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
     },
-    orderBy: { createdAt: "desc" },
-    take: 100,
+    ...(p.filters.status ? { status: p.filters.status } : {}),
+    ...(p.filters.riskBand ? { riskBand: p.filters.riskBand } : {}),
+  };
+
+  const orderBy = orderByOf(p.sort, p.dir, ["createdAt", "status", "riskBand"], {
+    createdAt: "desc",
   });
+
+  const result = await paginate(
+    () => prisma.approvalRequest.count({ where }),
+    (skip, take) =>
+      prisma.approvalRequest.findMany({
+        where,
+        orderBy,
+        skip,
+        take,
+        include: {
+          quotation: { include: { customer: { select: { name: true } } } },
+          steps: { orderBy: { index: "asc" } },
+        },
+      }),
+    p,
+  );
+  return { ...result, params: p };
 }
 export async function getApproval(id: string) {
   const actor = await requireInternal();

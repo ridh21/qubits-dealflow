@@ -311,22 +311,32 @@ async function preparePublish(tx: Tx, productId: string) {
   );
   const changes = diffEntitlements(before, after);
   const groups = groupChangesForNotices(changes);
+  // Every group queries the same table filtered by tier, so the holders are
+  // fetched once for all affected tiers and matched in memory. Previously this
+  // issued one subscription query - with a customer+users join - per group.
+  const affectedTierIds = [...new Set(groups.map((g) => g.tierId))];
+  const allHolders = affectedTierIds.length
+    ? await tx.subscription.findMany({
+        where: {
+          plan: { tierId: { in: affectedTierIds } },
+          status: { in: ["SCHEDULED", "ACTIVE", "PAUSE_SCHEDULED", "PAUSED"] },
+        },
+        include: {
+          plan: { select: { tierId: true, interval: true } },
+          customer: {
+            include: { users: { where: { role: "CUSTOMER", isActive: true } } },
+          },
+        },
+      })
+    : [];
+
   const notices = [];
   for (const group of groups) {
-    const holders = await tx.subscription.findMany({
-      where: {
-        plan: {
-          tierId: group.tierId,
-          ...(group.interval ? { interval: group.interval } : {}),
-        },
-        status: { in: ["SCHEDULED", "ACTIVE", "PAUSE_SCHEDULED", "PAUSED"] },
-      },
-      include: {
-        customer: {
-          include: { users: { where: { role: "CUSTOMER", isActive: true } } },
-        },
-      },
-    });
+    const holders = allHolders.filter(
+      (sub) =>
+        sub.plan.tierId === group.tierId &&
+        (!group.interval || sub.plan.interval === group.interval),
+    );
     const tierName = state.tiers.find((t) => t.id === group.tierId)!.name;
     const messages = holders.flatMap((sub) => {
       const addresses = [
@@ -413,19 +423,23 @@ export async function publishChanges(
           "The draft changed. Preview again before publishing.",
         );
       // Replacing values also avoids PostgreSQL's nullable composite-unique default-row ambiguity.
-      await tx.entitlementValue.deleteMany({
-        where: { definition: { productId } },
+      await tx.entitlementValue.updateMany({
+        where: { definition: { productId }, deletedAt: null },
+        data: { deletedAt: new Date() },
       });
-      await tx.entitlementDefinition.deleteMany({
+      await tx.entitlementDefinition.updateMany({
         where: {
           productId,
+          deletedAt: null,
           id: { notIn: state.draft.definitions.map((d) => d.id) },
         },
+        data: { deletedAt: new Date() },
       });
       for (const def of state.draft.definitions)
         await tx.entitlementDefinition.upsert({
           where: { id: def.id },
-          update: { ...def, productId },
+          // Reviving the row keeps the live partial unique satisfied.
+          update: { ...def, productId, deletedAt: null },
           create: { ...def, productId },
         });
       if (state.draft.values.length)

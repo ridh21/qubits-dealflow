@@ -1,11 +1,12 @@
 import { PrismaClient } from "@prisma/client";
+import { softDeleteExtension } from "@/server/soft-delete";
 import { seedBase } from "./seed/base";
 import { seedCatalogue } from "./seed/catalogue";
 import { seedPlans } from "./seed/plans";
 import { seedPolicy } from "./seed/policy";
 import { seedDemo } from "./seed/demo";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient().$extends(softDeleteExtension);
 
 async function main() {
   console.log("Seeding DealFlow360…");

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { softDeleteExtension } from "@/server/soft-delete";
 
 /** Integration tests must explicitly opt into a disposable database. */
 export function testDatabase() {
@@ -14,5 +15,8 @@ export function testDatabase() {
   ) {
     throw new Error("The test database name or schema must contain 'test'.");
   }
-  return new PrismaClient({ datasources: { db: { url } } });
+  // Extended like the app client so tests exercise the same soft-delete reads.
+  return new PrismaClient({ datasources: { db: { url } } }).$extends(
+    softDeleteExtension,
+  );
 }

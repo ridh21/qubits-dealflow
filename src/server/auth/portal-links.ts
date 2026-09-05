@@ -39,28 +39,34 @@ export async function issuePortalLink(rawEmail: string) {
     },
   });
   if (!user || user.role !== "CUSTOMER" || !user.isActive) {
-    return { issued: false as const, devLink: null };
+    return { issued: false as const, messageId: null };
   }
 
   const token = randomBytes(32).toString("hex");
   const base = process.env.AUTH_URL ?? "http://localhost:3000";
   const link = `${base}/portal/login/verify?token=${token}`;
 
-  await prisma.$transaction(async (tx) => {
+  const messageId = await prisma.$transaction(async (tx) => {
     const { payload: policy } = await getActivePolicy(tx, "PORTAL");
-    const expires = new Date(Date.now() + policy.magicLinkMinutes * 60 * 1000);
+    const expiresAtUnix = Date.now() + policy.magicLinkMinutes * 60 * 1000;
     await tx.verificationToken.deleteMany({
       where: { identifier: email, purpose: "PORTAL_LOGIN" },
     });
     await tx.verificationToken.create({
-      data: { identifier: email, token, expires, purpose: "PORTAL_LOGIN" },
+      data: {
+        identifier: email,
+        token,
+        expires: new Date(expiresAtUnix),
+        expiresAtUnix: BigInt(expiresAtUnix),
+        purpose: "PORTAL_LOGIN",
+      },
     });
     const body = renderEmail({
       title: "Your DealFlow360 sign-in link",
       intro: `Hi ${user.name}, use the link below to open your customer portal. It expires in ${policy.magicLinkMinutes} minutes.`,
       cta: { label: "Open my portal", href: link },
     });
-    await queueEmail(tx, {
+    const queued = await queueEmail(tx, {
       to: email,
       toName: user.name,
       subject: "Your DealFlow360 sign-in link",
@@ -69,10 +75,10 @@ export async function issuePortalLink(rawEmail: string) {
       relatedType: "USER",
       relatedId: user.id,
     });
+    return queued.id;
   });
 
-  return {
-    issued: true as const,
-    devLink: process.env.NODE_ENV === "production" ? null : link,
-  };
+  // The emailed link is the only way in. No dev shortcut is returned, so the
+  // flow that ships is the flow that gets exercised.
+  return { issued: true as const, messageId };
 }

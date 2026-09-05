@@ -18,13 +18,8 @@ export function PortalLoginForm() {
           <CheckCircle className="size-4" />
           <AlertTitle>Check your inbox</AlertTitle>
           <AlertDescription>
-            If that address has portal access, a sign-in link is on its way. It expires in 15
-            minutes.
-            {state.data.devLink ? (
-              <a href={state.data.devLink} className="text-primary-700 mt-2 block break-all underline">
-                Dev link: open portal
-              </a>
-            ) : null}
+            If that address has portal access, a sign-in link is on its way. Open
+            the link in that email to sign in — it expires shortly.
           </AlertDescription>
         </Alert>
       ) : null}

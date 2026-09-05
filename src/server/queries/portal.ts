@@ -15,6 +15,34 @@ import {
   safeEntitlements,
 } from "@/server/portal/select";
 export * from "@/server/portal/select";
+import { z } from "zod";
+import {
+  orderByOf,
+  paginate,
+  parseListParams,
+  type SearchParamsRecord,
+} from "@/server/list";
+
+const PortalOrderFilters = z.object({
+  fulfillmentStatus: z
+    .enum([
+      "UNALLOCATED",
+      "RESERVED",
+      "PARTIALLY_FULFILLED",
+      "BACKORDERED",
+      "FULFILLED",
+    ])
+    .optional(),
+});
+const PortalInvoiceFilters = z.object({
+  payment: z.enum(["outstanding", "paid", "overdue"]).optional(),
+});
+const PortalSubscriptionFilters = z.object({
+  status: z
+    .enum(["SCHEDULED", "ACTIVE", "PAUSE_SCHEDULED", "PAUSED", "CANCELLED"])
+    .optional(),
+});
+
 
 export async function portalActor() {
   const session = await requirePortalCustomer();
@@ -113,12 +141,34 @@ export async function listMyQuotations(
     pages,
   };
 }
-export async function listMyOrders(actor: SessionUser, db: Tx = prisma) {
-  return db.order.findMany({
-    where: customerScope(actor),
-    select: PORTAL_ORDER_SELECT,
-    orderBy: { confirmedAt: "desc" },
-  });
+export async function listMyOrders(
+  actor: SessionUser,
+  sp: SearchParamsRecord = {},
+  db: Tx = prisma,
+) {
+  const p = parseListParams(sp, PortalOrderFilters);
+  const where = {
+    ...customerScope(actor),
+    ...(p.filters.fulfillmentStatus
+      ? { fulfillmentStatus: p.filters.fulfillmentStatus }
+      : {}),
+    ...(p.q ? { number: { contains: p.q, mode: "insensitive" as const } } : {}),
+  };
+  const result = await paginate(
+    () => db.order.count({ where }),
+    (skip, take) =>
+      db.order.findMany({
+        where,
+        select: PORTAL_ORDER_SELECT,
+        orderBy: orderByOf(p.sort, p.dir, ["number", "confirmedAt"], {
+          confirmedAt: "desc",
+        }),
+        skip,
+        take,
+      }),
+    p,
+  );
+  return { ...result, params: p };
 }
 export async function getMyOrder(
   actor: SessionUser,
@@ -132,12 +182,44 @@ export async function getMyOrder(
   if (!row) throw new NotFound();
   return row;
 }
-export async function listMyInvoices(actor: SessionUser, db: Tx = prisma) {
-  return db.invoice.findMany({
-    where: { ...customerScope(actor), status: { not: "DRAFT" } },
-    select: PORTAL_INVOICE_SELECT,
-    orderBy: { issuedAt: "desc" },
-  });
+export async function listMyInvoices(
+  actor: SessionUser,
+  sp: SearchParamsRecord = {},
+  db: Tx = prisma,
+) {
+  const p = parseListParams(sp, PortalInvoiceFilters);
+  const where = {
+    ...customerScope(actor),
+    status: { not: "DRAFT" as const },
+    ...(p.filters.payment === "outstanding"
+      ? { paymentStatus: { not: "PAID" as const } }
+      : {}),
+    ...(p.filters.payment === "paid"
+      ? { paymentStatus: "PAID" as const }
+      : {}),
+    ...(p.filters.payment === "overdue"
+      ? { balanceMinor: { gt: 0 }, dueAt: { lt: new Date() } }
+      : {}),
+    ...(p.q ? { number: { contains: p.q, mode: "insensitive" as const } } : {}),
+  };
+  const result = await paginate(
+    () => db.invoice.count({ where }),
+    (skip, take) =>
+      db.invoice.findMany({
+        where,
+        select: PORTAL_INVOICE_SELECT,
+        orderBy: orderByOf(
+          p.sort,
+          p.dir,
+          ["number", "issuedAt", "dueAt", "balanceMinor"],
+          { issuedAt: "desc" },
+        ),
+        skip,
+        take,
+      }),
+    p,
+  );
+  return { ...result, params: p };
 }
 export async function getMyInvoice(
   actor: SessionUser,
@@ -151,16 +233,38 @@ export async function getMyInvoice(
   if (!row) throw new NotFound();
   return row;
 }
-export async function listMySubscriptions(actor: SessionUser, db: Tx = prisma) {
-  const rows = await db.subscription.findMany({
-    where: customerScope(actor),
-    select: PORTAL_SUBSCRIPTION_SELECT,
-    orderBy: { createdAt: "desc" },
-  });
-  return rows.map(({ entitlementsSnapshot, ...row }) => ({
-    ...row,
-    entitlements: safeEntitlements(entitlementsSnapshot),
-  }));
+export async function listMySubscriptions(
+  actor: SessionUser,
+  sp: SearchParamsRecord = {},
+  db: Tx = prisma,
+) {
+  const p = parseListParams(sp, PortalSubscriptionFilters);
+  const where = {
+    ...customerScope(actor),
+    ...(p.filters.status ? { status: p.filters.status } : {}),
+  };
+  const result = await paginate(
+    () => db.subscription.count({ where }),
+    (skip, take) =>
+      db.subscription.findMany({
+        where,
+        select: PORTAL_SUBSCRIPTION_SELECT,
+        orderBy: orderByOf(p.sort, p.dir, ["createdAt", "status"], {
+          createdAt: "desc",
+        }),
+        skip,
+        take,
+      }),
+    p,
+  );
+  return {
+    ...result,
+    params: p,
+    rows: result.rows.map(({ entitlementsSnapshot, ...row }) => ({
+      ...row,
+      entitlements: safeEntitlements(entitlementsSnapshot),
+    })),
+  };
 }
 export async function getMySubscription(
   actor: SessionUser,

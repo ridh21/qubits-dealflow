@@ -15,7 +15,6 @@ import {
   SidebarInset,
   SidebarMenuButton,
   SidebarProvider,
-  SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -82,47 +81,52 @@ export function AppShell({
     <TooltipProvider>
       <WorkspaceActionsProvider>
         <SidebarProvider>
-          <Sidebar collapsible="offcanvas" role="complementary" aria-label="Workspace sidebar">
-            <SidebarHeader className="gap-4 p-4">
+          {/* "icon" rather than "offcanvas": collapsing on desktop should
+              narrow the rail to icons, not hide navigation entirely. */}
+          <Sidebar collapsible="icon" role="complementary" aria-label="Workspace sidebar">
+            <SidebarHeader className="gap-4 p-4 group-data-[collapsible=icon]:px-2">
               <div className="flex items-center justify-between gap-2">
                 <Link
                   href={portal ? "/portal" : "/dashboard"}
                   className="font-display flex items-center gap-2 font-semibold"
                 >
-                  <span className="bg-primary text-primary-foreground grid size-8 place-items-center rounded-lg">
+                  <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-lg">
                     D
                   </span>
-                  DealFlow360
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    DealFlow360
+                  </span>
                 </Link>
-                <SidebarTrigger className="md:hidden" />
               </div>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground text-xs group-data-[collapsible=icon]:hidden">
                 {portal ? "Customer portal" : "Sales operations"}
               </p>
             </SidebarHeader>
-            <SidebarSeparator />
+            {/* The sidebar is navigation only. Page actions live in the
+                workspace toolbar, beside the content they act on. */}
             <SidebarContent>
               <SidebarGroup>
                 <SidebarGroupLabel>Workspace</SidebarGroupLabel>
                 <SidebarNavigation items={nav} />
               </SidebarGroup>
-              <WorkspaceActionsSlot />
-              {!portal && (
+              {!portal && configuration.length > 0 && (
                 <SidebarGroup>
                   <SidebarGroupLabel>Configuration</SidebarGroupLabel>
                   <SidebarNavigation items={configuration} />
                 </SidebarGroup>
               )}
             </SidebarContent>
-            <SidebarFooter className="border-t p-4">
-              <p className="truncate text-sm font-medium">
-                {user.name ?? user.email}
-              </p>
-              <p className="text-muted-foreground mb-2 text-xs capitalize">
-                {user.role?.replaceAll("_", " ").toLowerCase()}
-              </p>
+            <SidebarFooter className="border-t p-3 group-data-[collapsible=icon]:p-1">
+              <div className="px-1 group-data-[collapsible=icon]:hidden">
+                <p className="truncate text-sm font-medium">
+                  {user.name ?? user.email}
+                </p>
+                <p className="text-muted-foreground text-xs capitalize">
+                  {user.role?.replaceAll("_", " ").toLowerCase()}
+                </p>
+              </div>
               <form action={portal ? portalLogoutAction : logoutAction}>
-                <SidebarMenuButton type="submit">
+                <SidebarMenuButton type="submit" tooltip="Sign out">
                   <SignOut className="size-4" />
                   <span>Sign out</span>
                 </SidebarMenuButton>
@@ -130,8 +134,12 @@ export function AppShell({
             </SidebarFooter>
           </Sidebar>
           <SidebarInset className="min-w-0">
-            <div className="p-3 md:hidden">
-              <SidebarTrigger aria-label="Open navigation" />
+            {/* Single toolbar: the one nav toggle, and this page's actions. */}
+            <div className="bg-background/80 sticky top-0 z-20 flex min-h-13 flex-wrap items-center gap-2 border-b px-3 py-2 backdrop-blur sm:px-4">
+              <SidebarTrigger aria-label="Toggle navigation" />
+              <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
+                <WorkspaceActionsSlot />
+              </div>
             </div>
             <div className="mx-auto w-full max-w-[1440px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
               {children}

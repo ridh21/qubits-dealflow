@@ -66,7 +66,7 @@ export default async function ApprovalPage({
           ))}
         </ol>
       </section>
-      <Table>
+      <Table containerClassName="rounded-none border-0">
         <TableHeader>
           <TableRow>
             {[

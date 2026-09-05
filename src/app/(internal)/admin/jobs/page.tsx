@@ -26,7 +26,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     <PageHeader title="Operational jobs" description="Billing run history, recorded outcomes and retries. Times are shown in UTC." />
     <JobActions runId={selected?.runId} canRetry={selected?.canRetry ?? false} page={history.page} hasNext={history.hasNext} />
     <section aria-label="Billing run history" className="rounded-xl border">
-      <Table>
+      <Table containerClassName="rounded-none border-0">
         <TableHeader><TableRow><TableHead>Started</TableHead><TableHead>Outcome</TableHead><TableHead>Invoices</TableHead><TableHead>Failures</TableHead><TableHead>Run</TableHead></TableRow></TableHeader>
         <TableBody>{history.rows.map((run) => <TableRow key={run.runId} data-state={run.runId === selectedId ? "selected" : undefined}>
           <TableCell className="tabular text-xs">{date(run.startedAt)}</TableCell>

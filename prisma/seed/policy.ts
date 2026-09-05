@@ -1,8 +1,9 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { DbClient } from "@/server/db";
 import { POLICY_DEFAULTS, PolicyKindZ } from "../../src/domain/policy/schemas";
 import { parsePolicy } from "../../src/domain/policy/validate-discount-risk";
 /** Run after catalogue seed. Never replaces an administrator's published configuration. */
-export async function seedPolicy(prisma: PrismaClient) {
+export async function seedPolicy(prisma: DbClient) {
   const categories = await prisma.category.findMany();
   const categoryCeilingsBp = Object.fromEntries(
     categories.map((c) => [

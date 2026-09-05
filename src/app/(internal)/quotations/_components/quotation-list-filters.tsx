@@ -86,7 +86,9 @@ function DateField({
         name={name}
         value={date ? format(date, "yyyy-MM-dd") : ""}
       />
-      <DatePicker label={label} value={date} onChange={setDate} />
+      {/* The filter panel supplies its own compact label above, so the picker
+          keeps the name only as its accessible name. */}
+      <DatePicker label={label} value={date} onChange={setDate} hideLabel />
     </div>
   );
 }

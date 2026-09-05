@@ -28,7 +28,7 @@ export default async function WarehousesPage() {
 
       <Card className="shadow-none">
         <CardContent className="p-0">
-          <Table>
+          <Table containerClassName="rounded-none border-0">
             <TableHeader className="bg-muted/40">
               <TableRow>
                 <TableHead>Warehouse</TableHead>

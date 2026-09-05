@@ -11,15 +11,14 @@ import {
   canReviseQuotation,
 } from "./quotation-access";
 import { changeQuotationCustomerAction } from "../_actions/change-customer";
-import Link from "next/link";
 import {
   Check,
   Plus,
   Repeat,
   Pencil,
-  ArrowSquareOut,
-  ArrowLeft,
   Trash,
+  Info,
+  WarningCircle,
 } from "@/components/icons";
 import type {
   getQuotation,
@@ -34,9 +33,29 @@ import {
   cancelQuoteAction,
 } from "@/server/actions/quotations";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormError } from "@/components/layout/form-error";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -73,6 +92,24 @@ import { formatMinor, formatBp } from "@/domain/money/money";
 import type { ActionResult } from "@/domain/errors";
 import type { CycleSummary } from "@/domain/pricing/types";
 
+/** One label/amount pair, with the number right-aligned and tabular. */
+function TotalRow({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-muted-foreground capitalize">{label}</dt>
+      <dd className={strong ? "tabular font-semibold" : "tabular"}>{value}</dd>
+    </div>
+  );
+}
+
 type Props = {
   data: Awaited<ReturnType<typeof getQuotation>>;
   products: Awaited<ReturnType<typeof quotationCatalogue>>;
@@ -105,6 +142,8 @@ export function QuoteBuilder({
       "revise" | "cancel" | "customer" | null
     >(null),
     [error, setError] = useState(""),
+    // Href held back by the unsaved-changes guard until the user decides.
+    [leaveTo, setLeaveTo] = useState<string | null>(null),
     [pending, start] = useTransition();
   const router = useRouter(),
     editable = canEditQuotation(q, actor),
@@ -144,7 +183,8 @@ export function QuoteBuilder({
     const navigate = (e: MouseEvent) => {
       const link =
         e.target instanceof Element ? e.target.closest("a[href]") : null;
-      if (link && pending) {
+      if (!link) return;
+      if (pending) {
         e.preventDefault();
         e.stopPropagation();
         setError(
@@ -152,13 +192,14 @@ export function QuoteBuilder({
         );
         return;
       }
-      if (
-        link &&
-        !window.confirm("Leave without saving your quotation changes?")
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      // Let the browser handle new-tab and download intents untouched.
+      if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+      const href = link.getAttribute("href");
+      if (!href) return;
+      // Hold the navigation and ask in-app instead of via window.confirm.
+      e.preventDefault();
+      e.stopPropagation();
+      setLeaveTo(href);
     };
     window.addEventListener("beforeunload", warn);
     document.addEventListener("click", navigate, true);
@@ -167,6 +208,23 @@ export function QuoteBuilder({
       document.removeEventListener("click", navigate, true);
     };
   }, [dirty, pending]);
+  /** Refills the builder from the saved quotation, dropping local edits. */
+  function reloadFromServer() {
+    setLines(
+      q.lines.map((line) => ({
+        id: line.id,
+        qty: line.qty,
+        discountBp: line.discountBp,
+      })),
+    );
+    setDiscount(q.orderDiscountBp);
+    setNote(q.customerNote ?? "");
+    setDelivery(q.requestedDeliveryDate ?? undefined);
+    setValid(q.validUntil ?? undefined);
+    setCustomerId(q.customerId);
+    setError("");
+    router.refresh();
+  }
   function run(fn: () => Promise<ActionResult<unknown>>) {
     start(async () => {
       const r = await fn();
@@ -224,21 +282,19 @@ export function QuoteBuilder({
               <Plus aria-hidden="true" />
               Add product
             </Button>
-            <Button
-              variant="outline"
-              disabled={pending || dirty}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Replace line prices, costs and tax with current catalogue values?",
-                  )
-                )
-                  run(() => repriceQuoteAction(version));
-              }}
-            >
-              <Repeat aria-hidden="true" />
-              Reprice from catalogue
-            </Button>
+            <ConfirmDialog
+              title="Reprice from catalogue?"
+              description="Line prices, costs and tax are replaced with current catalogue values. Negotiated line prices on this quotation are lost."
+              confirmLabel="Reprice lines"
+              cancelLabel="Keep current prices"
+              onConfirm={() => run(() => repriceQuoteAction(version))}
+              trigger={
+                <Button variant="outline" disabled={pending || dirty}>
+                  <Repeat aria-hidden="true" />
+                  Reprice from catalogue
+                </Button>
+              }
+            />
           </>
         )}
         {!editable && canReviseQuotation(q, actor) && (
@@ -260,47 +316,25 @@ export function QuoteBuilder({
         <Button variant="outline" onClick={() => setHistory(true)}>
           Version history
         </Button>
-        <Button
-          variant="outline"
-          disabled={pending}
-          onClick={() => {
-            if (
-              !dirty ||
-              window.confirm("Discard unsaved changes and reload?")
-            ) {
-              setLines(
-                q.lines.map((line) => ({
-                  id: line.id,
-                  qty: line.qty,
-                  discountBp: line.discountBp,
-                })),
-              );
-              setDiscount(q.orderDiscountBp);
-              setNote(q.customerNote ?? "");
-              setDelivery(q.requestedDeliveryDate ?? undefined);
-              setValid(q.validUntil ?? undefined);
-              setCustomerId(q.customerId);
-              setError("");
-              router.refresh();
+        {/* Only offered when there is something to discard - on a clean
+            builder this was the page reload the browser already does.
+            "Go to back-end" and "Close workspace" were removed outright: both
+            just duplicated links the sidebar already provides. */}
+        {dirty && (
+          <ConfirmDialog
+            title="Discard unsaved changes and reload?"
+            description="The builder is refilled from the saved quotation. Your unsaved edits are lost."
+            confirmLabel="Discard and reload"
+            cancelLabel="Keep editing"
+            destructive
+            onConfirm={reloadFromServer}
+            trigger={
+              <Button variant="outline" disabled={pending}>
+                Discard changes
+              </Button>
             }
-          }}
-        >
-          Reload data
-        </Button>
-        {actor.role === "ADMIN" && (
-          <Button variant="outline" asChild>
-            <Link href="/admin">
-              <ArrowSquareOut aria-hidden="true" />
-              Go to back-end
-            </Link>
-          </Button>
+          />
         )}
-        <Button variant="outline" asChild>
-          <Link href="/quotations">
-            <ArrowLeft aria-hidden="true" />
-            Close workspace
-          </Link>
-        </Button>
         {canManageQuotation(q, actor) &&
           !["CONFIRMED", "CANCELLED"].includes(q.status) && (
             <Button
@@ -313,56 +347,79 @@ export function QuoteBuilder({
             </Button>
           )}
       </WorkspaceActions>
-      <p role="alert" className="text-sm text-destructive">
-        {error}
-      </p>
-      <div className="rounded-lg border bg-muted p-4 text-sm">
-        {customerChanged
-          ? "Customer change pending. Apply it from Actions to reprice this quotation."
-          : dirty
-            ? "Unsaved changes. Save to recalculate totals and discount limits."
-            : editable
-              ? "Draft terms are editable. Prices are snapshotted; repricing is explicit."
-              : `Terms locked · ${q.status.replaceAll("_", " ").toLowerCase()}. Create a revision to change them.`}
-      </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <div>
-          <p className="text-sm text-muted-foreground">Customer</p>
-          {editable ? (
-            <CustomerPicker
-              customers={customerOptions}
-              value={customerId}
-              onChange={setCustomerId}
-              disabled={pending || termsDirty}
-            />
-          ) : (
-            <p className="font-medium">
-              {q.customer.name} · {q.customer.tier}
+      {/* Only rendered when there is something to say - an always-present
+          empty alert box is what made this page read as cluttered. */}
+      {error ? (
+        <Alert variant="destructive">
+          <WarningCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {customerChanged || dirty || !editable ? (
+        <Alert>
+          <Info className="size-4" />
+          <AlertDescription>
+            {customerChanged
+              ? "Customer change pending. Apply it from the toolbar to reprice this quotation."
+              : dirty
+                ? "Unsaved changes. Save to recalculate totals and discount limits."
+                : `Terms locked · ${q.status.replaceAll("_", " ").toLowerCase()}. Create a revision to change them.`}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Terms</CardTitle>
+          <CardDescription>
+            {editable
+              ? "Prices are snapshotted when a line is added; repricing is explicit."
+              : "These terms are locked to the accepted version."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>Customer</Label>
+            {editable ? (
+              <CustomerPicker
+                customers={customerOptions}
+                value={customerId}
+                onChange={setCustomerId}
+                disabled={pending || termsDirty}
+              />
+            ) : (
+              <p className="font-medium">
+                {q.customer.name} · {q.customer.tier}
+              </p>
+            )}
+            <p className="text-muted-foreground text-xs">
+              Owner: {q.owner.name}
             </p>
-          )}
-          {editable && (
-            <p className="text-xs text-muted-foreground">
-              Changing customer reapplies catalogue pricing and discount limits
-              and may change currency. Save other edits first.
-            </p>
-          )}
-          <p className="text-sm text-muted-foreground">Owner: {q.owner.name}</p>
-        </div>
-        <DatePicker
-          label="Valid until"
-          value={valid}
-          onChange={setValid}
-          disabled={!editable || pending || customerChanged}
-        />
-        <DatePicker
-          label="Requested delivery"
-          value={delivery}
-          onChange={setDelivery}
-          disabled={!editable || pending || customerChanged}
-        />
-      </div>
-      <div className="overflow-x-auto rounded-xl border">
-        <Table>
+          </div>
+          <DatePicker
+            label="Valid until"
+            value={valid}
+            onChange={setValid}
+            disabled={!editable || pending || customerChanged}
+          />
+          <DatePicker
+            label="Requested delivery"
+            value={delivery}
+            onChange={setDelivery}
+            disabled={!editable || pending || customerChanged}
+          />
+        </CardContent>
+      </Card>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b pb-4">
+          <CardTitle>Lines</CardTitle>
+          <CardDescription>
+            {q.lines.length} {q.lines.length === 1 ? "line" : "lines"} · effective
+            discount is checked against each line&apos;s limit.
+          </CardDescription>
+        </CardHeader>
+        <Table containerClassName="rounded-none border-0">
           <TableHeader>
             <TableRow>
               {[
@@ -464,64 +521,96 @@ export function QuoteBuilder({
             ))}
             {!q.lines.length && (
               <TableRow>
-                <TableCell colSpan={8}>
-                  Add a product from the sidebar to start this quotation.
+                <TableCell colSpan={8} className="text-muted-foreground py-10 text-center">
+                  No lines yet. Use “Add product” in the toolbar to start this
+                  quotation.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-4">
-          <Label htmlFor="order-discount">Order discount (%)</Label>
-          <PercentInput
-            id="order-discount"
-            className="max-w-40"
-            value={discount}
-            onChange={setDiscount}
-            disabled={!editable || pending || customerChanged}
-          />
-          <p className="text-sm text-muted-foreground">
-            Allocated proportionally over amounts after line discounts.
-          </p>
-          <Label htmlFor="customer-note">Customer note</Label>
-          <Textarea
-            id="customer-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            disabled={!editable || pending || customerChanged}
-          />
-        </section>
-        <section className="space-y-4 rounded-xl border p-6">
-          <h2 className="text-lg font-semibold">Saved totals</h2>
-          <p>
-            One-time net{" "}
-            <strong>{formatMinor(q.oneTimeNetMinor, q.currency)}</strong>
-          </p>
-          <p>
-            One-time tax{" "}
-            {formatMinor(
-              q.lines
-                .filter((l) => !l.interval)
-                .reduce((s, l) => s + l.taxMinor, 0),
-              q.currency,
-            )}
-          </p>
-          <p>One-time margin {formatMinor(q.oneTimeMarginMinor, q.currency)}</p>
-          {Object.entries(recurring).map(([cycle, s]) => (
-            <div key={cycle} className="border-t pt-3">
-              <p className="font-medium">
-                {cycle.toLowerCase()} · {formatMinor(s.netMinor, q.currency)}{" "}
-                net per initial period
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Tax {formatMinor(s.taxMinor ?? 0, q.currency)} · margin{" "}
-                {formatMinor(s.marginMinor, q.currency)}
-              </p>
+      </Card>
+      <div className="grid items-start gap-6 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Adjustments</CardTitle>
+            <CardDescription>
+              The order discount is allocated proportionally over amounts after
+              line discounts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="order-discount">Order discount (%)</Label>
+              <PercentInput
+                id="order-discount"
+                className="max-w-40"
+                value={discount}
+                onChange={setDiscount}
+                disabled={!editable || pending || customerChanged}
+              />
             </div>
-          ))}
-        </section>
+            <div className="space-y-2">
+              <Label htmlFor="customer-note">Customer note</Label>
+              <Textarea
+                id="customer-note"
+                rows={4}
+                placeholder="Visible to the customer on the shared quotation."
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                disabled={!editable || pending || customerChanged}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Saved totals</CardTitle>
+            <CardDescription>
+              From the last save, not your unsaved edits.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <dl className="space-y-2">
+              <TotalRow
+                label="One-time net"
+                value={formatMinor(q.oneTimeNetMinor, q.currency)}
+                strong
+              />
+              <TotalRow
+                label="One-time tax"
+                value={formatMinor(
+                  q.lines
+                    .filter((l) => !l.interval)
+                    .reduce((s, l) => s + l.taxMinor, 0),
+                  q.currency,
+                )}
+              />
+              <TotalRow
+                label="One-time margin"
+                value={formatMinor(q.oneTimeMarginMinor, q.currency)}
+              />
+            </dl>
+            {Object.entries(recurring).map(([cycle, s]) => (
+              <dl key={cycle} className="space-y-2 border-t pt-3">
+                <TotalRow
+                  label={`${cycle.toLowerCase()} net`}
+                  value={formatMinor(s.netMinor, q.currency)}
+                  strong
+                />
+                <TotalRow
+                  label="Tax"
+                  value={formatMinor(s.taxMinor ?? 0, q.currency)}
+                />
+                <TotalRow
+                  label="Margin"
+                  value={formatMinor(s.marginMinor, q.currency)}
+                />
+              </dl>
+            ))}
+          </CardContent>
+        </Card>
       </div>
       <Sheet open={picker} onOpenChange={setPicker}>
         <SheetContent className="overflow-y-auto sm:max-w-xl">
@@ -602,9 +691,7 @@ export function QuoteBuilder({
               value={qty}
               onChange={(e) => setQty(Number(e.target.value))}
             />
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
+            <FormError message={error} />
             <Button
               disabled={
                 pending ||
@@ -697,6 +784,33 @@ export function QuoteBuilder({
           </Button>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={leaveTo !== null}
+        onOpenChange={(open) => !open && setLeaveTo(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This quotation has unsaved changes. Leaving now discards them.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={() => {
+                const href = leaveTo;
+                setLeaveTo(null);
+                if (href) router.push(href);
+              }}
+            >
+              Discard and leave
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

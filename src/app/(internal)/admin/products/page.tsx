@@ -23,7 +23,10 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
   const { rows, total, page, pageSize, pageCount } = await listProducts(sp);
 
   const [categories, activeCount, archivedCount, priceListCount] = await Promise.all([
-    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.category.findMany({
+      select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    }),
     prisma.product.count({ where: { status: "ACTIVE" } }),
     prisma.product.count({ where: { status: "ARCHIVED" } }),
     prisma.priceList.count({ where: { isActive: true } }),

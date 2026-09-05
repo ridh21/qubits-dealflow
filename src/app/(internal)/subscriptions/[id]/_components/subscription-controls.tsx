@@ -35,6 +35,7 @@ import type { ActionResult } from "@/domain/errors";
 import { dateLabel, label } from "../../_components/format";
 import { firstBoundaryOnOrAfter } from "@/domain/boundaries/boundaries";
 import type { RecurringInterval } from "@prisma/client";
+import { FormError } from "@/components/layout/form-error";
 
 type Props = {
   id: string;
@@ -425,9 +426,7 @@ function CommandForm(props: Props & { command: Command; close: () => void }) {
               aria-live="polite"
             >
               {preview?.input === inputKey && preview.error ? (
-                <p role="alert" className="text-destructive">
-                  {preview.error}
-                </p>
+                <FormError message={preview.error} />
               ) : previewData ? (
                 <>
                   <p className="font-medium">

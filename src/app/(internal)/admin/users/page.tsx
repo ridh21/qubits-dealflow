@@ -19,7 +19,10 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
   const user = await requireInternal();
   const sp = await searchParams;
   const { rows, total, page, pageSize, pageCount } = await listUsers(sp);
-  const teams = await prisma.team.findMany({ orderBy: { name: "asc" } });
+  const teams = await prisma.team.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
   const canManage = user.role === "ADMIN";
 
   const columns: Column<Row>[] = [

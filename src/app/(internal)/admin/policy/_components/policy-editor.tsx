@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { toast } from "sonner";
+import { ConfirmDialog, GuardedLink } from "@/components/confirm-dialog";
 import {
   type PolicyKind,
   type PolicyPayload,
@@ -27,6 +28,7 @@ import { SimpleEditor } from "./simple-editor";
 import { RecommendationEditor } from "./recommendation-editor";
 import { DiffView } from "./diff-view";
 import { RiskSimulator, OperationalSimulator } from "./simulator";
+import { FormError } from "@/components/layout/form-error";
 interface Props {
   kind: PolicyKind;
   initial: PolicyPayload<PolicyKind>;
@@ -79,31 +81,31 @@ export function PolicyEditor({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4 text-sm">
-        <Link
+        <GuardedLink
           className="underline"
           href="/admin/policy"
-          onClick={(e) => {
-            if (dirty && !window.confirm("Discard your unpublished changes?"))
-              e.preventDefault();
-          }}
+          guard={dirty}
+          title="Discard your unpublished changes?"
+          description="This policy has edits that have not been published. Leaving now discards them."
+          destructive
         >
           All policies
-        </Link>
+        </GuardedLink>
         <span>
           {activeId
             ? `Active version ${version}`
             : "No active version · review these initial defaults"}
         </span>
-        <Link
+        <GuardedLink
           className="underline"
           href={`/admin/policy/history/${kind}`}
-          onClick={(e) => {
-            if (dirty && !window.confirm("Discard your unpublished changes?"))
-              e.preventDefault();
-          }}
+          guard={dirty}
+          title="Discard your unpublished changes?"
+          description="This policy has edits that have not been published. Leaving now discards them."
+          destructive
         >
           Version history
-        </Link>
+        </GuardedLink>
       </div>
       {!editable && (
         <p className="rounded-lg border bg-muted p-4 text-sm">
@@ -172,19 +174,23 @@ export function PolicyEditor({
             >
               Review & publish
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!dirty || pending}
-              onClick={() => {
-                if (window.confirm("Discard your unpublished changes?")) {
-                  setDraft(initial);
-                  setMessage("");
-                }
+            <ConfirmDialog
+              title="Discard your unpublished changes?"
+              description="The editor returns to the last published version. This cannot be undone."
+              confirmLabel="Discard changes"
+              cancelLabel="Keep editing"
+              destructive
+              onConfirm={() => {
+                setDraft(initial);
+                setMessage("");
+                toast.success("Unpublished changes discarded.");
               }}
-            >
-              Discard changes
-            </Button>
+              trigger={
+                <Button type="button" variant="outline" disabled={!dirty || pending}>
+                  Discard changes
+                </Button>
+              }
+            />
             <span className="text-sm text-muted-foreground">
               {dirty ? "Unpublished changes" : "No unpublished changes"}
             </span>
@@ -240,9 +246,7 @@ export function PolicyEditor({
               onChange={(e) => setReason(e.target.value)}
             />
           </div>
-          <p role="alert" className="text-sm text-destructive">
-            {message}
-          </p>
+          <FormError message={message} />
           <DialogFooter>
             <Button
               type="button"

@@ -7,7 +7,7 @@ import {
 import { prisma, withTx, lockRow, type Tx } from "@/server/db";
 import { writeAudit } from "@/server/audit";
 import type { SessionUser } from "@/server/auth/guards";
-import { Forbidden, Conflict, ValidationError } from "@/domain/errors";
+import { Forbidden, Conflict, ValidationError, NotFound } from "@/domain/errors";
 import { periodEnd } from "@/domain/proration/period";
 import {
   cancellation,
@@ -38,13 +38,19 @@ export async function startSubscriptionsForOrder(tx: Tx, orderId: string) {
     where: { id: orderId },
     include: { lines: { where: { kind: "SUBSCRIPTION" } } },
   });
+  // One lookup for the whole order instead of one per subscription line.
+  const existingLineIds = new Set(
+    (
+      await tx.subscription.findMany({
+        where: { orderLineId: { in: order.lines.map((l) => l.id) } },
+        select: { orderLineId: true },
+      })
+    ).map((row) => row.orderLineId),
+  );
   for (const l of order.lines) {
     if (!l.planId)
       throw new ValidationError("Subscription order line has no plan.");
-    const existing = await tx.subscription.findUnique({
-      where: { orderLineId: l.id },
-    });
-    if (existing) continue;
+    if (existingLineIds.has(l.id)) continue;
     const sub = await tx.subscription.create({
       data: {
         orderId,
@@ -89,6 +95,25 @@ export async function regenerateSchedule(tx: Tx, id: string) {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const applied = new Set<string>();
+  // Every pending change names a plan, and the period loop below re-reads them
+  // once per period. Fetching the distinct set up front makes the schedule
+  // rebuild independent of the horizon length.
+  const changePlanIds = [
+    ...new Set(
+      pending
+        .map((c) => (c.detail as Record<string, unknown>)?.newPlanId)
+        .filter((id): id is string => typeof id === "string"),
+    ),
+  ];
+  const plansById = new Map(
+    changePlanIds.length
+      ? (
+          await tx.subscriptionPlan.findMany({
+            where: { id: { in: changePlanIds } },
+          })
+        ).map((plan) => [plan.id, plan])
+      : [],
+  );
   const projected = {
     qty: sub.qty,
     unitPriceMinor: sub.unitPriceMinor,
@@ -96,11 +121,13 @@ export async function regenerateSchedule(tx: Tx, id: string) {
     billingAnchor: sub.billingAnchor,
   };
   const items: Prisma.BillingScheduleItemCreateManyInput[] = [];
-  await tx.billingScheduleItem.deleteMany({
+  await tx.billingScheduleItem.updateMany({
     where: {
       subscriptionId: id,
       status: { in: ["UPCOMING", "SKIPPED_PAUSED", "SKIPPED_CANCELLED"] },
+      deletedAt: null,
     },
+    data: { deletedAt: new Date() },
   });
   for (let i = 0; i < policy.payload.scheduleHorizonPeriods; i++) {
     const status =
@@ -120,9 +147,10 @@ export async function regenerateSchedule(tx: Tx, id: string) {
         const detail = change.detail as Record<string, unknown>;
         projected.qty = Number(detail.newQty);
         projected.unitPriceMinor = Number(detail.newPriceMinor);
-        projected.plan = await tx.subscriptionPlan.findUniqueOrThrow({
-          where: { id: String(detail.newPlanId) },
-        });
+        const nextPlan = plansById.get(String(detail.newPlanId));
+        if (!nextPlan)
+          throw new NotFound("Scheduled plan change references a missing plan.");
+        projected.plan = nextPlan;
         if (detail.differentCycle) projected.billingAnchor = start;
         applied.add(change.id);
       }
@@ -146,10 +174,21 @@ export async function regenerateSchedule(tx: Tx, id: string) {
     });
     start = end;
   }
-  await tx.billingScheduleItem.createMany({
-    data: items,
-    skipDuplicates: true,
-  });
+  // The rows above were soft-deleted but still hold (subscriptionId,
+  // periodStart), so a plain createMany would collide. Upserting revives each
+  // row instead. This is one statement per period, bounded by the policy's
+  // scheduleHorizonPeriods (12) and run from the billing job, not a request.
+  for (const item of items)
+    await tx.billingScheduleItem.upsert({
+      where: {
+        subscriptionId_periodStart: {
+          subscriptionId: item.subscriptionId,
+          periodStart: item.periodStart,
+        },
+      },
+      update: { ...item, deletedAt: null },
+      create: item,
+    });
 }
 export async function issuePeriod(tx: Tx, id: string, start: Date) {
   const sub = await tx.subscription.findUniqueOrThrow({
@@ -209,6 +248,8 @@ export async function issuePeriod(tx: Tx, id: string, start: Date) {
       invoiceId: invoice.id,
       entitlements,
       amountMinor: amount,
+      // Invoicing a period revives it if a reschedule had retired the row.
+      deletedAt: null,
     },
   });
   await tx.subscription.update({
@@ -467,7 +508,7 @@ export async function changeSubscription(
             },
           },
           create: { subscriptionId: id, ...current },
-          update: current,
+          update: { ...current, deletedAt: null },
         });
       }
     }
@@ -539,14 +580,20 @@ async function cancellationPreview(
     },
     now,
   ).creditMinor;
+  // One grouped sum for every source invoice, rather than an aggregate per row.
+  const creditedBySource = new Map(
+    (
+      await tx.creditNote.groupBy({
+        by: ["sourceInvoiceId"],
+        where: { sourceInvoiceId: { in: sources.map((s) => s.id) } },
+        _sum: { amountMinor: true },
+      })
+    ).map((g) => [g.sourceInvoiceId, g._sum.amountMinor ?? 0]),
+  );
   for (const source of sources) {
-    const credited = await tx.creditNote.aggregate({
-      where: { sourceInvoiceId: source.id },
-      _sum: { amountMinor: true },
-    });
     const available = Math.max(
       0,
-      source.totalMinor - (credited._sum.amountMinor ?? 0),
+      source.totalMinor - (creditedBySource.get(source.id) ?? 0),
     );
     const amountMinor = Math.min(remaining, available);
     if (amountMinor > 0)

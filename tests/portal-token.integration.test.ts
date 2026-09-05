@@ -19,18 +19,21 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
               token,
               purpose: "PORTAL_LOGIN",
               expires: new Date(now.getTime() + 60000),
+              expiresAtUnix: BigInt(now.getTime() + 60000),
             },
             {
               identifier: "token-test@example.test",
               token: expired,
               purpose: "PORTAL_LOGIN",
               expires: now,
+              expiresAtUnix: BigInt(now.getTime()),
             },
             {
               identifier: "token-test@example.test",
               token: wrong,
               purpose: "OTHER",
               expires: new Date(now.getTime() + 60000),
+              expiresAtUnix: BigInt(now.getTime() + 60000),
             },
           ],
         });
