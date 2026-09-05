@@ -1,5 +1,7 @@
 import { getReport, reportFilterOptions } from "@/server/queries/reports";
 import { ReportWorkspace } from "./_components/report-workspace";
+import { DomainError } from "@/domain/errors";
+import { ZodError } from "zod";
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -13,12 +15,15 @@ export default async function ReportsPage({
     try {
       report = await getReport(filters);
     } catch (cause) {
-      error =
-        cause instanceof Error ? cause.message : "Unable to generate report.";
+      if (cause instanceof DomainError) error = cause.message;
+      else if (cause instanceof ZodError)
+        error = cause.issues[0]?.message ?? "Check the report filters.";
+      else throw cause;
     }
   }
   return (
     <ReportWorkspace
+      key={JSON.stringify(filters)}
       options={options}
       report={report}
       error={error}

@@ -2,6 +2,7 @@ import {
   Prisma,
   type Subscription,
   type SubscriptionPlan,
+  type OrderLine,
 } from "@prisma/client";
 import { prisma, withTx, lockRow, type Tx } from "@/server/db";
 import { writeAudit } from "@/server/audit";
@@ -11,6 +12,7 @@ import { periodEnd } from "@/domain/proration/period";
 import {
   cancellation,
   periodAmount,
+  recurringPriceBasis,
   prorate,
 } from "@/domain/proration/prorate";
 import { pctOf } from "@/domain/money/money";
@@ -69,7 +71,7 @@ export async function startSubscriptionsForOrder(tx: Tx, orderId: string) {
 export async function regenerateSchedule(tx: Tx, id: string) {
   const sub = await tx.subscription.findUniqueOrThrow({
       where: { id },
-      include: { plan: true },
+      include: { plan: true, orderLine: true },
     }),
     policy = await getActivePolicy(tx, "BILLING");
   let start =
@@ -138,6 +140,7 @@ export async function regenerateSchedule(tx: Tx, id: string) {
         projected.qty,
         projected.unitPriceMinor,
         sub.discountBp,
+        recurringPriceBasis(sub.orderLine),
       ),
       status,
     });
@@ -160,7 +163,12 @@ export async function issuePeriod(tx: Tx, id: string, start: Date) {
       start,
       sub.billingAnchor.getUTCDate(),
     ),
-    amount = periodAmount(sub.qty, sub.unitPriceMinor, sub.discountBp),
+    amount = periodAmount(
+      sub.qty,
+      sub.unitPriceMinor,
+      sub.discountBp,
+      recurringPriceBasis(sub.orderLine),
+    ),
     entitlements = await currentEntitlements(tx, sub.plan);
   const invoice = await issueInvoice(tx, {
     customerId: sub.customerId,
@@ -277,7 +285,10 @@ export async function previewChange(
   return changePreview(s, plan, input.newQty ?? s.qty, s.orderLine.taxBp, now);
 }
 function changePreview(
-  s: Subscription & { plan: SubscriptionPlan },
+  s: Subscription & {
+    plan: SubscriptionPlan;
+    orderLine: Pick<OrderLine, "qty" | "unitPriceMinor" | "netMinor">;
+  },
   plan: SubscriptionPlan,
   qty: number,
   taxBp: number,
@@ -301,9 +312,10 @@ function changePreview(
     throw new ValidationError(
       "Choose a positive quantity and active plan for this product.",
     );
-  const old = periodAmount(s.qty, s.unitPriceMinor, s.discountBp),
+  const basis = recurringPriceBasis(s.orderLine),
+    old = periodAmount(s.qty, s.unitPriceMinor, s.discountBp, basis),
     newPrice = plan.id === s.planId ? s.unitPriceMinor : plan.priceMinor,
-    next = periodAmount(qty, newPrice, s.discountBp),
+    next = periodAmount(qty, newPrice, s.discountBp, basis),
     period = { start: s.currentPeriodStart, end: s.currentPeriodEnd },
     different = plan.interval !== s.plan.interval;
   const creditMinor =
@@ -449,7 +461,10 @@ export async function changeSubscription(
         };
         await tx.billingScheduleItem.upsert({
           where: {
-            subscriptionId_periodStart: { subscriptionId: id, periodStart: now },
+            subscriptionId_periodStart: {
+              subscriptionId: id,
+              periodStart: now,
+            },
           },
           create: { subscriptionId: id, ...current },
           update: current,
@@ -508,7 +523,12 @@ async function cancellationPreview(
   const line = await tx.orderLine.findUniqueOrThrow({
     where: { id: sub.orderLineId },
   });
-  const net = periodAmount(sub.qty, sub.unitPriceMinor, sub.discountBp);
+  const net = periodAmount(
+    sub.qty,
+    sub.unitPriceMinor,
+    sub.discountBp,
+    recurringPriceBasis(line),
+  );
   let remaining = cancellation(
     {
       periodAmount: net + pctOf(net, line.taxBp),

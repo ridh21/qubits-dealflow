@@ -7,10 +7,12 @@ import { salesCharts } from "./sales";
 import { financeCharts } from "./finance";
 import { opsCharts } from "./ops";
 import { adminCharts } from "./admin";
+import { mrrHistoryCharts } from "./mrr-history";
 export async function buildAnalytics(
   actor: SessionUser,
   raw: Record<string, unknown>,
   db: Tx = prisma,
+  now = new Date(),
 ) {
   const view = analyticsView(
     actor.role,
@@ -25,12 +27,14 @@ export async function buildAnalytics(
     filters,
     scope: reportQuotationWhere(scopedActor, filters),
     period: reportPeriod(filters),
-    now: new Date(),
+    now,
   };
   const charts = await (view === "rep" || view === "manager"
     ? salesCharts(context, view === "manager")
     : view === "finance"
-      ? financeCharts(context)
+      ? Promise.all([financeCharts(context), mrrHistoryCharts(context)]).then(
+          (groups) => groups.flat(),
+        )
       : view === "ops"
         ? opsCharts(context)
         : adminCharts(context));

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { ReportData, reportFilterOptions } from "@/server/queries/reports";
 import { reportSections, type ReportSection } from "@/server/reports/sections";
 import { PageHeader } from "@/components/layout/page-header";
@@ -22,11 +22,24 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { FileText, Check } from "@/components/icons";
+import { FileText, Check, CaretLeft, CaretRight } from "@/components/icons";
 import { formatMinor } from "@/domain/money/money";
 function ReportTable({ section }: { section: ReportSection }) {
-  const [page, setPage] = useState(1);
-  const pages = Math.max(1, Math.ceil(section.rows.length / 20));
+  const search = useSearchParams();
+  const key = `table-${section.title.toLowerCase().replaceAll(" ", "-")}`;
+  const requestedSize = Number(search.get(`${key}-size`));
+  const size = [10, 25, 50, 100].includes(requestedSize) ? requestedSize : 25;
+  const pages = Math.max(1, Math.ceil(section.rows.length / size));
+  const requestedPage = Number(search.get(`${key}-page`));
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0
+    ? Math.min(requestedPage, pages) : 1;
+  const navigate = (nextPage: number, nextSize = size) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set(`${key}-page`, String(nextPage));
+    url.searchParams.set(`${key}-size`, String(nextSize));
+    // Update table state without regenerating a manual report.
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  };
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">{section.title}</h2>
@@ -39,7 +52,7 @@ function ReportTable({ section }: { section: ReportSection }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {section.rows.slice((page - 1) * 20, page * 20).map((row, index) => (
+          {section.rows.slice((page - 1) * size, page * size).map((row, index) => (
             <TableRow key={index}>
               {section.columns.map((c) => (
                 <TableCell key={c.key}>
@@ -59,27 +72,36 @@ function ReportTable({ section }: { section: ReportSection }) {
           )}
         </TableBody>
       </Table>
-      <div className="flex items-center gap-3 text-sm">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={page === 1}
-          onClick={() => setPage((p) => p - 1)}
-        >
-          Previous
-        </Button>
-        <span>
-          Page {page} of {pages} · {section.rows.length} records
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={page >= pages}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </Button>
-      </div>
+      <p className="text-sm text-muted-foreground" aria-live="polite">
+        Page {page} of {pages} · {section.rows.length} records
+      </p>
+      {section.rows.length > 10 && (
+        <WorkspaceActions>
+          <p className="text-sm font-medium">{section.title}</p>
+          <Select value={String(size)} onValueChange={(value) => navigate(1, Number(value))}>
+            <SelectTrigger aria-label={`${section.title} rows per page`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[10, 25, 50, 100].map((value) => (
+                <SelectItem key={value} value={String(value)}>{value} rows</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {pages > 1 && (
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={page === 1}
+                aria-label={`Previous ${section.title} page`} onClick={() => navigate(page - 1)}>
+                <CaretLeft aria-hidden="true" /> Previous
+              </Button>
+              <Button size="sm" variant="outline" disabled={page >= pages}
+                aria-label={`Next ${section.title} page`} onClick={() => navigate(page + 1)}>
+                Next <CaretRight aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+        </WorkspaceActions>
+      )}
     </section>
   );
 }
@@ -156,7 +178,7 @@ export function ReportWorkspace({
           onClick={() =>
             start(() =>
               router.push(
-                `/reports?${new URLSearchParams({ ...filters, generated: "1", run: String(Date.now()) })}`,
+                `/reports?${new URLSearchParams({ ...Object.fromEntries(Object.entries(filters).filter(([key]) => !key.startsWith("table-"))), generated: "1", run: String(Date.now()) })}`,
               ),
             )
           }

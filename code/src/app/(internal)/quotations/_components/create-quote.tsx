@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createQuoteAction } from "@/server/actions/quotations";
 import { Button } from "@/components/ui/button";
@@ -11,17 +11,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { WorkspaceActions } from "@/components/layout/workspace-actions";
+import { Plus } from "@/components/icons";
 export function CreateQuote({
   customers,
 }: {
   customers: { id: string; name: string; tier: string }[];
 }) {
+  const formId = useId();
   const [id, setId] = useState(""),
     [error, setError] = useState(""),
     [pending, start] = useTransition(),
     router = useRouter();
   return (
     <form
+      id={formId}
       className="max-w-lg space-y-4 rounded-xl border p-6"
       onSubmit={(e) => {
         e.preventDefault();
@@ -52,9 +56,12 @@ export function CreateQuote({
       <p role="alert" className="text-sm text-destructive">
         {error}
       </p>
-      <Button disabled={!id || pending} type="submit">
-        {pending ? "Creating…" : "Create quotation"}
-      </Button>
+      <WorkspaceActions>
+        <Button disabled={!id || pending} type="submit" form={formId}>
+          <Plus aria-hidden="true" />
+          {pending ? "Creating…" : "Create quotation"}
+        </Button>
+      </WorkspaceActions>
     </form>
   );
 }

@@ -1,5 +1,16 @@
 "use client";
-import { useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
+import {
+  createUpsellDismissals,
+  dismissedProductIds,
+  upsellDismissalKey,
+} from "./upsell-dismissals";
 import { useRouter } from "next/navigation";
 import type { suggestionsFor } from "@/server/services/upsell.service";
 import { addQuoteLineAction } from "@/server/actions/quotations";
@@ -16,15 +27,40 @@ export function UpsellPanel({
   version: number;
   currency: string;
 }) {
-  const [dismissed, setDismissed] = useState<string[]>([]),
-    [error, setError] = useState(""),
+  const key = upsellDismissalKey(id, version);
+  const store = useMemo(
+    () => createUpsellDismissals(key, () => window.localStorage),
+    [key],
+  );
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  );
+  const dismissed = useMemo(() => dismissedProductIds(snapshot), [snapshot]);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === key || event.key === null) store.refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [key, store]);
+  const [error, setError] = useState(""),
     [pending, start] = useTransition(),
     router = useRouter();
   if (!items.length) return null;
   return (
     <section className="space-y-4 rounded-xl border p-5">
       <h2 className="text-lg font-semibold">Suggested additions</h2>
+      <p className="text-sm text-muted-foreground">
+        Dismissed suggestions stay hidden for this revision on this browser.
+      </p>
       <p role="alert">{error}</p>
+      {items.every((item) => dismissed.includes(item.productId)) && (
+        <p className="text-sm text-muted-foreground">
+          All suggestions dismissed for this revision.
+        </p>
+      )}
       {items
         .filter((i) => !dismissed.includes(i.productId))
         .map((i) => (
@@ -64,14 +100,9 @@ export function UpsellPanel({
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => {
-                  const next = [...dismissed, i.productId];
-                  setDismissed(next);
-                  localStorage.setItem(
-                    `dismiss:${id}:${version}`,
-                    JSON.stringify(next),
-                  );
-                }}
+                disabled={pending}
+                aria-label={`Dismiss ${i.name} for this revision`}
+                onClick={() => store.dismiss(i.productId)}
               >
                 Dismiss
               </Button>

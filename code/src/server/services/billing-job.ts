@@ -6,29 +6,61 @@ import {
   regenerateSchedule,
 } from "./subscription-billing.service";
 import { processOneTransition } from "./pause-resume.service";
-import { writeAudit } from "@/server/audit";
-export async function runBilling(now = new Date()) {
+import {
+  startBillingObservation,
+  recordBillingFailure,
+  finishBillingObservation,
+  safeJobFailure,
+  type BillingRunOptions,
+  type JobFailure,
+} from "./job-observation.service";
+export async function runBilling(now = new Date(), options: BillingRunOptions = {}) {
+  // Fail closed before business writes if a durable start cannot be recorded.
+  const run = await startBillingObservation(now, options);
   const counts = {
+    ordersStarted: 0,
     invoices: 0,
     transitions: 0,
-    failed: [] as { id: string; message: string }[],
+    failed: [] as JobFailure[],
+    observationFailures: 0,
   };
-  const orders = await prisma.order.findMany({
-    where: {
-      status: "OPEN",
-      lines: { some: { kind: "SUBSCRIPTION", subscription: null } },
-    },
-    select: { id: true },
-  });
-  for (const o of orders)
-    await withTx(async (tx) => {
-      await lockRow(tx, "Order", o.id);
-      await startSubscriptionsForOrder(tx, o.id);
+  const failed = async (error: unknown, scope: JobFailure["scope"], id: string) => {
+    const failure = safeJobFailure(error, scope, id);
+    counts.failed.push(failure);
+    if (!(await recordBillingFailure(run, failure))) counts.observationFailures++;
+  };
+  let orders: { id: string }[] = [];
+  try {
+    orders = await prisma.order.findMany({
+      where: {
+        status: "OPEN",
+        lines: { some: { kind: "SUBSCRIPTION", subscription: null } },
+      },
+      select: { id: true },
     });
-  const ids = await prisma.subscription.findMany({
-    where: { status: { not: "CANCELLED" } },
-    select: { id: true },
-  });
+  } catch (error) {
+    await failed(error, "ORDER_DISCOVERY", run.runId);
+  }
+  for (const { id } of orders) {
+    try {
+      await withTx(async (tx) => {
+        await lockRow(tx, "Order", id);
+        await startSubscriptionsForOrder(tx, id);
+      });
+      counts.ordersStarted++;
+    } catch (error) {
+      await failed(error, "ORDER", id);
+    }
+  }
+  let ids: { id: string }[] = [];
+  try {
+    ids = await prisma.subscription.findMany({
+      where: { status: { not: "CANCELLED" } },
+      select: { id: true },
+    });
+  } catch (error) {
+    await failed(error, "SUBSCRIPTION_DISCOVERY", run.runId);
+  }
   for (const { id } of ids) {
     try {
       const outcome = await withTx(
@@ -37,7 +69,8 @@ export async function runBilling(now = new Date()) {
           let invoices = 0,
             transitions = 0;
           // Re-read after every event: a late run must bill earlier active periods before a later pause.
-          for (let guard = 0; guard < 120; guard++) {
+          let guard = 0;
+          for (; guard < 120; guard++) {
             const s = await tx.subscription.findUniqueOrThrow({
               where: { id },
               include: { plan: true },
@@ -109,25 +142,36 @@ export async function runBilling(now = new Date()) {
             invoices++;
           }
           await regenerateSchedule(tx, id);
-          return { invoices, transitions };
+          // Commit catch-up progress; a retry can continue instead of repeating
+          // a transaction that will always exceed the bounded event loop.
+          let limited = false;
+          if (guard === 120) {
+            const remaining = await tx.subscription.findUniqueOrThrow({ where: { id } });
+            limited = remaining.status !== "CANCELLED" && [
+              remaining.nextBillingDate,
+              remaining.cancelEffectiveAt,
+              ...(remaining.status === "PAUSE_SCHEDULED" ? [remaining.pauseEffectiveAt] : []),
+              ...(remaining.status === "PAUSED" ? [remaining.resumeAt] : []),
+            ].some((date) => date && date <= now);
+          }
+          return { invoices, transitions, limited };
         },
         { timeout: process.env.TEST_DATABASE_URL ? 120000 : 60000 },
       );
       counts.invoices += outcome.invoices;
       counts.transitions += outcome.transitions;
+      if (outcome.limited) await failed({ code: "CATCH_UP_LIMIT" }, "SUBSCRIPTION", id);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Billing failed";
-      counts.failed.push({ id, message });
-      await withTx((tx) =>
-        writeAudit(tx, {
-          actorType: "SYSTEM",
-          entityType: "Subscription",
-          entityId: id,
-          action: "BILLING.FAILED",
-          reason: message.slice(0, 1000),
-        }),
-      );
+      await failed(e, "SUBSCRIPTION", id);
     }
   }
-  return counts;
+  const status = counts.failed.some((failure) => failure.scope.endsWith("DISCOVERY"))
+    ? "FAILED" as const
+    : counts.failed.length ? "PARTIAL_FAILURE" as const : "SUCCEEDED" as const;
+  await finishBillingObservation(run, {
+    status, ordersStarted: counts.ordersStarted, invoices: counts.invoices,
+    transitions: counts.transitions, failureCount: counts.failed.length,
+    observationFailures: counts.observationFailures, failures: counts.failed.slice(0, 100),
+  });
+  return { ...counts, runId: run.runId, status };
 }

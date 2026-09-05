@@ -1,5 +1,5 @@
 import { pctOf } from "../money/money";
-import { periodAmount } from "../proration/prorate";
+import { periodAmount, type RecurringPriceBasis } from "../proration/prorate";
 import type { Period } from "../proration/period";
 
 export interface OrderInvoiceLine {
@@ -27,6 +27,7 @@ export interface InvoiceLine {
   periodEnd?: Date;
 }
 export interface RecurringSubscription {
+  pricingBasis?: RecurringPriceBasis;
   id: string;
   orderLineId?: string;
   qty: number;
@@ -119,7 +120,12 @@ export function recurringInvoiceLine(
   sub: RecurringSubscription,
   period: Period,
 ): InvoiceLine {
-  const amountMinor = periodAmount(sub.qty, sub.unitPriceMinor, sub.discountBp);
+  const amountMinor = periodAmount(
+    sub.qty,
+    sub.unitPriceMinor,
+    sub.discountBp,
+    sub.pricingBasis,
+  );
   return {
     description: sub.description ?? "Subscription period",
     qty: sub.qty,

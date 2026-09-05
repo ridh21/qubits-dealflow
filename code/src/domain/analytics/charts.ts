@@ -37,13 +37,16 @@ export interface AnalyticsChart {
     | "donut"
     | "combo"
     | "scatter"
-    | "radial";
+    | "radial"
+    | "funnel"
+    | "heatmap";
   unit: string;
   dimension: string;
   rows: { label: string; [key: string]: string | number }[];
   series: ChartSeries[];
   stacked?: boolean;
   maximum?: number;
+  reference?: { value: number; label: string };
 }
 export function percentage(numerator: number, denominator: number) {
   return denominator > 0
@@ -90,4 +93,54 @@ export function daysSalesOutstanding(
     Math.round((Math.max(0, balanceMinor) / salesMinor) * periodDays * 100) /
     100
   );
+}
+
+export function pipelineMilestones(
+  quotes: {
+    submitted: boolean;
+    approved: boolean;
+    sent: boolean;
+    confirmed: boolean;
+  }[],
+) {
+  return [
+    { label: "Created", value: quotes.length },
+    {
+      label: "Submitted",
+      value: quotes.filter(
+        (q) => q.submitted || q.approved || q.sent || q.confirmed,
+      ).length,
+    },
+    {
+      label: "Approved",
+      value: quotes.filter((q) => q.approved || q.sent || q.confirmed).length,
+    },
+    {
+      label: "Sent",
+      value: quotes.filter((q) => q.sent || q.confirmed).length,
+    },
+    { label: "Confirmed", value: quotes.filter((q) => q.confirmed).length },
+  ];
+}
+
+/** Sparse UTC calendar cells: each represented week keeps its actual date label. */
+export function alertHeatmap(dates: Date[]) {
+  const counts = new Map<string, number>();
+  for (const date of dates) {
+    const label = date.toISOString().slice(0, 10);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([label, value]) => {
+      const date = new Date(`${label}T00:00:00Z`),
+        weekday = (date.getUTCDay() + 6) % 7;
+      date.setUTCDate(date.getUTCDate() - weekday);
+      return {
+        label,
+        value,
+        day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][weekday],
+        week: date.toISOString().slice(0, 10),
+      };
+    });
 }

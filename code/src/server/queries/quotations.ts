@@ -1,13 +1,10 @@
-import { Prisma, QuotationStatus } from "@prisma/client";
-import { z } from "zod";
+import { Prisma } from "@prisma/client";
+import { parseQuotationListParams } from "@/domain/quotation/list-params";
+import { quotationListWhere, quotationListOrder } from "./quotation-list";
 import { prisma } from "@/server/db";
 import { requireInternal, type SessionUser } from "@/server/auth/guards";
 import { NotFound } from "@/domain/errors";
-import {
-  paginate,
-  parseListParams,
-  type SearchParamsRecord,
-} from "@/server/list";
+import { paginate, type SearchParamsRecord } from "@/server/list";
 export function quotationScope(actor: SessionUser): Prisma.QuotationWhereInput {
   return actor.role === "SALES_REP"
     ? { ownerId: actor.id }
@@ -21,60 +18,58 @@ export function quotationScope(actor: SessionUser): Prisma.QuotationWhereInput {
       : {};
 }
 export async function listQuotations(sp: SearchParamsRecord) {
-  const actor = await requireInternal(),
-    p = parseListParams(
-      sp,
-      z.object({
-        status: z.nativeEnum(QuotationStatus).optional(),
-        customerId: z.string().optional(),
-        ownerId: z.string().optional(),
-        riskBand: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
-        view: z.enum(["table", "board"]).default("table"),
-      }),
-    );
-  const where: Prisma.QuotationWhereInput = {
-    AND: [
-      quotationScope(actor),
-      {
-        ...(p.q
-          ? {
-              OR: [
-                { number: { contains: p.q, mode: "insensitive" } },
-                { customer: { name: { contains: p.q, mode: "insensitive" } } },
-              ],
-            }
-          : {}),
-        ...(p.filters.status ? { status: p.filters.status } : {}),
-        ...(p.filters.customerId ? { customerId: p.filters.customerId } : {}),
-        ...(p.filters.ownerId ? { ownerId: p.filters.ownerId } : {}),
-        ...(p.filters.riskBand ? { riskBand: p.filters.riskBand } : {}),
-      },
-    ],
-  };
-  const orderBy: Prisma.QuotationOrderByWithRelationInput =
-    p.sort === "totalMinor"
-      ? { totalMinor: p.dir }
-      : p.sort === "number"
-        ? { number: p.dir }
-        : { updatedAt: p.dir };
-  return {
-    ...(await paginate(
+  const actor = await requireInternal();
+  const p = parseQuotationListParams(sp);
+  const scope = quotationScope(actor);
+  const where = quotationListWhere(scope, p);
+  const [result, owners, teams, customers] = await Promise.all([
+    paginate(
       () => prisma.quotation.count({ where }),
       (skip, take) =>
         prisma.quotation.findMany({
           where,
-          orderBy,
+          orderBy: quotationListOrder(p),
           skip,
           take,
-          include: {
+          select: {
+            id: true,
+            number: true,
+            version: true,
+            status: true,
+            currency: true,
+            totalMinor: true,
+            oneTimeNetMinor: true,
+            riskBand: true,
+            createdAt: true,
+            updatedAt: true,
             customer: { select: { name: true } },
             owner: { select: { name: true } },
           },
         }),
       p,
-    )),
-    view: p.filters.view,
+    ),
+    prisma.user.findMany({
+      where: { ownedQuotations: { some: scope } },
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    }),
+    prisma.team.findMany({
+      where: { users: { some: { ownedQuotations: { some: scope } } } },
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    }),
+    prisma.customer.findMany({
+      where: { quotations: { some: scope } },
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    }),
+  ]);
+  return {
+    ...result,
+    view: p.view,
+    params: p,
     actor,
+    options: { owners, teams, customers },
   };
 }
 export async function getQuotation(id: string) {

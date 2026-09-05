@@ -1,23 +1,28 @@
 import type { AnalyticsContext } from "./context";
 import { month } from "./context";
 import {
+  pipelineMilestones,
+  alertHeatmap,
   percentage,
   seriesRows,
   type AnalyticsChart,
 } from "@/domain/analytics/charts";
 import { discountByRep } from "@/domain/reports/kpis";
+import { reportQuotationWhere } from "@/server/reports/scope";
 export async function salesCharts(
   context: AnalyticsContext,
   manager: boolean,
 ): Promise<AnalyticsChart[]> {
-  const { db, scope, period } = context;
-  const [quotes, requests, alerts] = await Promise.all([
+  const { db, scope, period, actor, filters } = context;
+  const [quotes, requests, alerts, benchmark, flagged] = await Promise.all([
     db.quotation.findMany({
       where: {
         AND: [scope, { createdAt: { gte: period.from, lt: period.to } }],
       },
       include: {
         owner: { select: { name: true } },
+        versions: { select: { reason: true, requiredLevel: true } },
+        approvals: { select: { status: true } },
         lines: { select: { excessBp: true, addedFromUpsell: true } },
       },
     }),
@@ -38,11 +43,71 @@ export async function salesCharts(
       },
       select: { quotationId: true, type: true },
     }),
+    // The rep benchmark exposes only a weighted percentage, never peer records.
+    !manager && actor.teamId
+      ? db.quotation.groupBy({
+          by: ["currency"],
+          where: {
+            AND: [
+              reportQuotationWhere(
+                { ...actor, role: "SALES_MANAGER" },
+                { ...filters, ownerId: undefined, teamId: actor.teamId },
+              ),
+              {
+                owner: { teamId: actor.teamId },
+                createdAt: { gte: period.from, lt: period.to },
+              },
+            ],
+          },
+          _sum: { subtotalMinor: true, discountMinor: true },
+        })
+      : Promise.resolve([]),
+    manager
+      ? db.dealHealthAlert.findMany({
+          where: {
+            OR: [{ quotation: scope }, { order: { quotation: scope } }],
+            flaggedAt: { gte: period.from, lt: period.to },
+          },
+          select: { flaggedAt: true },
+        })
+      : Promise.resolve([]),
   ]);
   const charts: AnalyticsChart[] = [];
+  const submissionReasons = [
+    "SUBMIT",
+    "PROPOSAL_APPLIED",
+    "PROPOSALS_AUTO_APPLIED",
+  ];
+  charts.push({
+    id: "milestones",
+    title: "Pipeline milestone funnel",
+    question:
+      "How many quotations created in this period have reached each milestone? Later milestones imply earlier ones; revisions do not erase prior progress.",
+    kind: "funnel",
+    dimension: "Milestone reached",
+    unit: "Quotations",
+    series: [{ key: "value", label: "Quotations" }],
+    rows: pipelineMilestones(
+      quotes.map((q) => ({
+        submitted:
+          q.versions.some((v) => submissionReasons.includes(v.reason)) ||
+          q.approvals.length > 0,
+        approved:
+          q.approvedVersion !== null ||
+          q.approvals.some((a) => a.status === "APPROVED") ||
+          q.versions.some(
+            (v) =>
+              submissionReasons.includes(v.reason) && v.requiredLevel === 0,
+          ),
+        sent: q.sentAt !== null,
+        confirmed: q.confirmedAt !== null || q.status === "CONFIRMED",
+      })),
+    ),
+  });
   const statusOrder = [
     "DRAFT",
     "PENDING_APPROVAL",
+    "REVISION_REQUESTED",
     "APPROVED",
     "SENT",
     "UNDER_NEGOTIATION",
@@ -108,6 +173,7 @@ export async function salesCharts(
   });
   for (const currency of [...new Set(quotes.map((q) => q.currency))].sort()) {
     const currencyQuotes = quotes.filter((q) => q.currency === currency);
+    const teamBenchmark = benchmark.find((b) => b.currency === currency);
     const reps = discountByRep(
       currencyQuotes.map((q) => ({
         ownerId: q.ownerId,
@@ -117,6 +183,16 @@ export async function salesCharts(
     );
     charts.push({
       id: `discount-${currency}`,
+      reference:
+        teamBenchmark && (teamBenchmark._sum.subtotalMinor ?? 0) > 0
+          ? {
+              label: "Team weighted average",
+              value: percentage(
+                teamBenchmark._sum.discountMinor ?? 0,
+                teamBenchmark._sum.subtotalMinor ?? 0,
+              ),
+            }
+          : undefined,
       title: `Value-weighted discounts · ${currency}`,
       question: "How much discount was given relative to gross quoted value?",
       kind: "horizontal",
@@ -174,6 +250,17 @@ export async function salesCharts(
     }
   }
   if (manager) {
+    charts.push({
+      id: "alerts-calendar",
+      title: "Alerts by week and weekday",
+      question:
+        "When were alerts flagged? Darker cells mean more alerts; rows show weeks with activity, and blank cells mean zero. Includes alerts resolved since then.",
+      kind: "heatmap",
+      dimension: "Date (UTC)",
+      unit: "Alerts",
+      series: [{ key: "value", label: "Alerts" }],
+      rows: alertHeatmap(flagged.map((a) => a.flaggedAt)),
+    });
     const statuses = [
       "WAITING",
       "PENDING",

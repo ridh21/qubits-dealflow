@@ -19,6 +19,7 @@ import {
   Envelope,
   UserIcon,
   Package,
+  ClockCounterClockwise,
 } from "@/components/icons";
 const navigationIcons: Record<string, typeof Gauge> = {
   dashboard: Gauge,
@@ -39,6 +40,7 @@ const navigationIcons: Record<string, typeof Gauge> = {
   policy: ShieldCheck,
   plans: Repeat,
   emails: Envelope,
+  jobs: ClockCounterClockwise,
   portal: FileText,
   orders: Package,
   messages: Envelope,

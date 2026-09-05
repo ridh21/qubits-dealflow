@@ -4,6 +4,10 @@ import {
   PolarAngleAxis,
   RadialBar,
   RadialBarChart,
+  Funnel,
+  FunnelChart,
+  LabelList,
+  ReferenceLine,
   Area,
   AreaChart,
   Bar,
@@ -17,6 +21,7 @@ import {
   PieChart,
   Scatter,
   ScatterChart,
+  ZAxis,
   XAxis,
   YAxis,
 } from "recharts";
@@ -95,10 +100,94 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
         tickFormatter={horizontal ? undefined : (v) => number.format(Number(v))}
       />
       <ChartTooltip content={<ChartTooltipContent />} />
+      {chart.reference && (
+        <ReferenceLine
+          x={horizontal ? chart.reference.value : undefined}
+          y={horizontal ? undefined : chart.reference.value}
+          stroke="var(--foreground)"
+          strokeDasharray="4 4"
+          ifOverflow="extendDomain"
+        />
+      )}
     </>
   );
   let visual;
   switch (chart.kind) {
+    case "heatmap": {
+      const max = Math.max(1, ...chart.rows.map((r) => Number(r.value)));
+      const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      visual = (
+        <ScatterChart margin={{ left: 15, right: 15, top: 10 }}>
+          <CartesianGrid />
+          <XAxis
+            type="number"
+            dataKey="weekday"
+            domain={[-0.5, 6.5]}
+            ticks={[0, 1, 2, 3, 4, 5, 6]}
+            tickFormatter={(value) => weekdays[value] ?? ""}
+            interval={0}
+          />
+          <YAxis
+            type="category"
+            dataKey="week"
+            width={85}
+            allowDuplicatedCategory={false}
+          />
+          <ZAxis type="number" dataKey="value" range={[180, 180]} />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                labelFormatter={(_, payload) =>
+                  payload[0]?.payload?.label ?? "Date"
+                }
+              />
+            }
+          />
+          <Scatter
+            data={chart.rows.map((row) => ({
+              ...row,
+              weekday: weekdays.indexOf(String(row.day)),
+            }))}
+            name="Alerts"
+            shape="square"
+            isAnimationActive={false}
+          >
+            {chart.rows.map((r) => (
+              <Cell
+                key={r.label}
+                fill={color(0)}
+                fillOpacity={0.25 + (Number(r.value) / max) * 0.75}
+                stroke={color(0)}
+              />
+            ))}
+          </Scatter>
+        </ScatterChart>
+      );
+      break;
+    }
+
+    case "funnel":
+      visual = (
+        <FunnelChart margin={{ right: 95, left: 5 }}>
+          <ChartTooltip content={<ChartTooltipContent nameKey="label" />} />
+          <Funnel
+            data={chart.rows}
+            dataKey={chart.series[0].key}
+            nameKey="label"
+            isAnimationActive={false}
+          >
+            {chart.rows.map((r, i) => (
+              <Cell key={r.label} fill={color(i)} />
+            ))}
+            <LabelList
+              position="right"
+              dataKey="label"
+              fill="var(--foreground)"
+            />
+          </Funnel>
+        </FunnelChart>
+      );
+      break;
     case "radial":
       visual = (
         <RadialBarChart
@@ -263,9 +352,11 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
       );
   }
   const legends =
-    chart.kind === "donut"
-      ? chart.rows.map((r) => r.label)
-      : chart.series.map((s) => s.label);
+    chart.kind === "scatter"
+      ? ["Quotation", "Open discount anomaly"]
+      : ["donut", "funnel"].includes(chart.kind)
+        ? chart.rows.map((r) => r.label)
+        : chart.series.map((s) => s.label);
   return (
     <section
       className="min-w-0 space-y-4 rounded-xl border bg-card p-5"
@@ -342,6 +433,11 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
         <ChartContainer
           config={config}
           className="h-72 w-full"
+          style={
+            horizontal
+              ? { height: Math.max(288, chart.rows.length * 34 + 35) }
+              : undefined
+          }
           role="group"
           aria-label={chart.title}
         >
@@ -354,6 +450,12 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
           <span className="text-sm font-normal">{chart.unit}</span>
         </p>
       )}
+      {chart.reference && (
+        <p className="text-xs text-muted-foreground">
+          {chart.reference.label}: {number.format(chart.reference.value)}{" "}
+          {chart.unit} (dashed line)
+        </p>
+      )}
       <ul
         className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
         aria-label="Legend"
@@ -363,7 +465,9 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
             <span
               aria-hidden="true"
               className="size-2.5 rounded-sm"
-              style={{ background: color(i) }}
+              style={{
+                background: color(chart.kind === "scatter" && i === 1 ? 3 : i),
+              }}
             />
             {label}
           </li>

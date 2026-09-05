@@ -18,6 +18,7 @@ export interface ChangeDelta {
   description: string;
 }
 export interface QuantityChangeInput {
+  pricingBasis?: RecurringPriceBasis;
   qty: number;
   unitPriceMinor: number;
   discountBp: number;
@@ -62,13 +63,53 @@ export function prorate(amountMinor: number, period: Period, at: Date): number {
     .toNumber();
 }
 
+export interface RecurringPriceBasis {
+  grossMinor: number;
+  netMinor: number;
+}
+
+/** Immutable accepted amounts preserve allocation residuals that rounded basis points lose. */
+export function recurringPriceBasis(line: {
+  qty: number;
+  unitPriceMinor: number;
+  netMinor: number;
+}): RecurringPriceBasis {
+  return {
+    grossMinor: new Decimal(line.qty).mul(line.unitPriceMinor).toNumber(),
+    netMinor: line.netMinor,
+  };
+}
+
 export function periodAmount(
   qty: number,
   unitPriceMinor: number,
   discountBp: number,
+  basis?: RecurringPriceBasis,
 ): number {
   if (!Number.isSafeInteger(qty) || qty < 0)
     throw new RangeError("Quantity must be a nonnegative integer");
+  if (basis) {
+    if (
+      ![basis.grossMinor, basis.netMinor].every(Number.isSafeInteger) ||
+      basis.netMinor < 0 ||
+      basis.grossMinor < basis.netMinor
+    )
+      throw new RangeError(
+        "Accepted recurring amounts must be valid minor units",
+      );
+    if (basis.grossMinor > 0) {
+      const gross = new Decimal(qty).mul(unitPriceMinor);
+      // Match quotation rounding: subtract the rounded discount, not a rounded net.
+      return gross
+        .minus(
+          gross
+            .mul(basis.grossMinor - basis.netMinor)
+            .div(basis.grossMinor)
+            .toDecimalPlaces(0, Decimal.ROUND_HALF_UP),
+        )
+        .toNumber();
+    }
+  }
   return applyDiscount(
     new Decimal(qty).mul(unitPriceMinor).toNumber(),
     discountBp,
@@ -100,11 +141,13 @@ export function quantityChange(
         input.qty,
         input.unitPriceMinor,
         input.discountBp,
+        input.pricingBasis,
       ),
       newPeriodAmount: periodAmount(
         newQty,
         input.unitPriceMinor,
         input.discountBp,
+        input.pricingBasis,
       ),
     },
     at,

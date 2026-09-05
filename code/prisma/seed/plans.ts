@@ -1,6 +1,49 @@
 import { PrismaClient, type RecurringInterval } from "@prisma/client";
 import { pathToFileURL } from "node:url";
 
+// Plan prices are INR minor units (paise) and must stay aligned with the
+// catalogue base prices: SUB-CARE base = Standard MONTHLY, SUB-PHOTO base = Pro MONTHLY.
+const products = [
+  {
+    sku: "SUB-CARE",
+    name: "Care Plan",
+      tiers: [{ name: "Standard", prices: { MONTHLY: 49_900, QUARTERLY: 149_900, YEARLY: 499_000 } }],
+  },
+  {
+    sku: "SUB-PHOTO",
+    name: "Photo App",
+    tiers: [
+      {
+        name: "Pro",
+        prices: {
+          WEEKLY: 4_900,
+          MONTHLY: 14_900,
+          QUARTERLY: 39_900,
+          YEARLY: 149_900,
+        },
+      },
+      {
+        name: "Plus",
+        prices: {
+          WEEKLY: 8_900,
+          MONTHLY: 24_900,
+          QUARTERLY: 69_900,
+          YEARLY: 249_900,
+        },
+      },
+      {
+        name: "Pro Max",
+        prices: {
+          WEEKLY: 14_900,
+          MONTHLY: 44_900,
+          QUARTERLY: 124_900,
+          YEARLY: 449_900,
+        },
+      },
+    ],
+  },
+];
+
 /** Additive and repeatable: rerunning a demo seed never replaces admin edits. */
 export async function seedPlans(prisma: PrismaClient) {
   const category = await prisma.category.upsert({
@@ -8,46 +51,6 @@ export async function seedPlans(prisma: PrismaClient) {
     update: {},
     create: { name: "Subscriptions" },
   });
-  const products = [
-    {
-      sku: "SUB-CARE",
-      name: "Care Plan",
-      tiers: [{ name: "Standard", prices: { MONTHLY: 4600, YEARLY: 46000 } }],
-    },
-    {
-      sku: "SUB-PHOTO",
-      name: "Photo App",
-      tiers: [
-        {
-          name: "Pro",
-          prices: {
-            WEEKLY: 500,
-            MONTHLY: 1500,
-            QUARTERLY: 4000,
-            YEARLY: 15000,
-          },
-        },
-        {
-          name: "Plus",
-          prices: {
-            WEEKLY: 900,
-            MONTHLY: 2500,
-            QUARTERLY: 7000,
-            YEARLY: 25000,
-          },
-        },
-        {
-          name: "Pro Max",
-          prices: {
-            WEEKLY: 1500,
-            MONTHLY: 4500,
-            QUARTERLY: 12500,
-            YEARLY: 45000,
-          },
-        },
-      ],
-    },
-  ];
   for (const spec of products) {
     await prisma.$transaction(
       async (tx) => {
@@ -60,7 +63,7 @@ export async function seedPlans(prisma: PrismaClient) {
             type: "SUBSCRIPTION",
             categoryId: category.id,
             basePriceMinor: spec.tiers[0].prices.MONTHLY,
-            costPriceMinor: 0,
+            costPriceMinor: 3_900,
           },
         });
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`plans:${product.id}`}))`;
