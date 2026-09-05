@@ -8,6 +8,7 @@ import {
   acceptQuotation,
   submitProposals,
   withdrawProposal,
+  respondToProposal,
 } from "@/server/services/negotiation.service";
 import type { SessionUser } from "@/server/auth/guards";
 async function fixture() {
@@ -41,6 +42,74 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
   "portal transaction boundaries",
   { timeout: 180000 },
   () => {
+    it("keeps earlier-version proposals actionable without permitting stale writes", async () => {
+      const { actor, buyer, quote } = await fixture();
+      const line = await prisma.quotationLine.findFirstOrThrow({
+        where: { quotationId: quote.id },
+      });
+      await submitProposals(buyer, quote.id, quote.version, [
+        { lineId: line.id, body: "Two units", proposedQty: 2 },
+        {
+          body: "Please deliver next week",
+          requestedDeliveryDate: new Date("2043-01-20"),
+        },
+        { body: "Please call first" },
+      ]);
+      const storedMessages = await prisma.negotiationMessage.findMany({
+        where: { quotationId: quote.id, author: "CUSTOMER" },
+      });
+      const messages = [
+        "Two units",
+        "Please deliver next week",
+        "Please call first",
+      ].map((body) => storedMessages.find((m) => m.body === body)!);
+      const first = await respondToProposal(
+        actor,
+        messages[0].id,
+        "APPLY",
+        "Quantity updated",
+        quote.version,
+      );
+      expect(first.revisionVersion).toBeGreaterThan(quote.version);
+      await expect(
+        respondToProposal(
+          actor,
+          messages[1].id,
+          "APPLY",
+          "Stale browser",
+          quote.version,
+        ),
+      ).rejects.toThrow("changed");
+      await expect(
+        acceptQuotation(buyer, quote.id, first.revisionVersion!),
+      ).rejects.toThrow("withdraw");
+      const second = await respondToProposal(
+        actor,
+        messages[1].id,
+        "APPLY",
+        "Reviewed against current terms",
+        first.revisionVersion!,
+      );
+      await withdrawProposal(buyer, messages[2].id);
+      expect(
+        (await acceptQuotation(buyer, quote.id, second.revisionVersion!))
+          .outcome,
+      ).toBe("ORDER_CREATED");
+      expect(
+        (
+          await prisma.quotationLine.findUniqueOrThrow({
+            where: { id: line.id },
+          })
+        ).qty,
+      ).toBe(2);
+      expect(
+        (
+          await prisma.negotiationMessage.findUniqueOrThrow({
+            where: { id: messages[1].id },
+          })
+        ).quotationVersion,
+      ).toBe(quote.version);
+    });
     it("creates one order for concurrent acceptance and hides another customer's quotation", async () => {
       const { buyer, quote } = await fixture();
       await expect(

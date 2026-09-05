@@ -22,12 +22,19 @@ export async function respondToProposalAction(input: unknown) {
     roles,
     schema: z.object({
       messageId: z.string().min(1),
+      expectedVersion: z.number().int().positive(),
       decision: z.enum(["APPLY", "DECLINE"]),
       reply: z.string().trim().min(1).max(2000),
     }),
     input,
     execute: (actor, data) =>
-      respondToProposal(actor, data.messageId, data.decision, data.reply),
+      respondToProposal(
+        actor,
+        data.messageId,
+        data.decision,
+        data.reply,
+        data.expectedVersion,
+      ),
     paths: ["/quotations", "/portal", "/approvals"],
   });
 }
