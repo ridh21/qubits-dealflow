@@ -10,25 +10,34 @@ interface SeedUser {
 }
 
 const INTERNAL_USERS: SeedUser[] = [
-  { email: "admin@dealflow360.test", name: "Ada Admin", role: "ADMIN" },
-  { email: "manager@dealflow360.test", name: "Marcus Manager", role: "SALES_MANAGER" },
-  { email: "finance@dealflow360.test", name: "Fiona Finance", role: "FINANCE" },
-  { email: "rep@dealflow360.test", name: "Riley Rep", role: "SALES_REP" },
-  { email: "rep2@dealflow360.test", name: "Robin Rep", role: "SALES_REP" },
+  { email: "arjun.admin@yopmail.com", name: "Arjun Malhotra", role: "ADMIN" },
+  { email: "vikram.manager@yopmail.com", name: "Vikram Desai", role: "SALES_MANAGER" },
+  { email: "kavya.manager@yopmail.com", name: "Kavya Iyer", role: "SALES_MANAGER" },
+  { email: "priya.finance@yopmail.com", name: "Priya Raghavan", role: "FINANCE" },
+  { email: "rahul.rep@yopmail.com", name: "Rahul Verma", role: "SALES_REP" },
+  { email: "sneha.rep@yopmail.com", name: "Sneha Kulkarni", role: "SALES_REP" },
+  { email: "imran.rep@yopmail.com", name: "Imran Sheikh", role: "SALES_REP" },
 ];
 
-const CUSTOMERS: { name: string; tier: CustomerTier; email: string }[] = [
-  { name: "Acme Industries", tier: "GOLD", email: "buyer@acme.test" },
-  { name: "Beta Logistics", tier: "SILVER", email: "buyer@beta.test" },
-  { name: "Delta Retail", tier: "BRONZE", email: "buyer@delta.test" },
-  { name: "Nova Systems", tier: "GOLD", email: "buyer@nova.test" },
-  { name: "Zenith Labs", tier: "SILVER", email: "buyer@zenith.test" },
-  { name: "Orion Freight", tier: "GOLD", email: "buyer@orion.test" },
+const CUSTOMERS: { name: string; tier: CustomerTier; email: string | null }[] = [
+  { name: "Sharma Industries", tier: "GOLD", email: "aarav.sharma@yopmail.com" },
+  { name: "Mehta Logistics", tier: "SILVER", email: "ananya.mehta@yopmail.com" },
+  { name: "Gupta Retail", tier: "BRONZE", email: "rohan.gupta@yopmail.com" },
+  { name: "Reddy Systems", tier: "GOLD", email: "deepa.reddy@yopmail.com" },
+  { name: "Iyer Pharma", tier: "SILVER", email: "karthik.iyer@yopmail.com" },
+  { name: "Chettiar Freight", tier: "GOLD", email: "lakshmi.chettiar@yopmail.com" },
+  { name: "Patil Agro", tier: "BRONZE", email: "vijay.patil@yopmail.com" },
+  // Edge: no billing email and no portal user on file.
+  { name: "Nair Foods", tier: "BRONZE", email: null },
+  // Edge: deactivated account — hidden from active lists.
+  { name: "Bose Textiles", tier: "BRONZE", email: "riya.bose@yopmail.com" },
 ];
 
 const PORTAL_USERS = [
-  { customer: "Acme Industries", email: "buyer@acme.test", name: "Ava Buyer" },
-  { customer: "Beta Logistics", email: "buyer@beta.test", name: "Ben Buyer" },
+  { customer: "Sharma Industries", email: "aarav.sharma@yopmail.com", name: "Aarav Sharma" },
+  { customer: "Mehta Logistics", email: "ananya.mehta@yopmail.com", name: "Ananya Mehta" },
+  { customer: "Gupta Retail", email: "rohan.gupta@yopmail.com", name: "Rohan Gupta" },
+  { customer: "Reddy Systems", email: "deepa.reddy@yopmail.com", name: "Deepa Reddy" },
 ];
 
 export async function seedBase(prisma: PrismaClient) {
@@ -48,13 +57,26 @@ export async function seedBase(prisma: PrismaClient) {
     });
   }
 
+  // Edge: a deactivated rep with no team, never logged in.
+  await prisma.user.upsert({
+    where: { email: "imran.rep@yopmail.com" },
+    update: { isActive: false, teamId: null },
+    create: {
+      email: "imran.rep@yopmail.com",
+      name: "Imran Sheikh",
+      role: "SALES_REP",
+      passwordHash,
+      isActive: false,
+    },
+  });
+
   // One pending signup so the admin Users screen always has something to approve.
   await prisma.user.upsert({
-    where: { email: "newjoiner@dealflow360.test" },
+    where: { email: "neha.newjoiner@yopmail.com" },
     update: {},
     create: {
-      email: "newjoiner@dealflow360.test",
-      name: "Nina Newjoiner",
+      email: "neha.newjoiner@yopmail.com",
+      name: "Neha Joshi",
       passwordHash,
       role: "PENDING",
       isActive: false,
@@ -64,9 +86,24 @@ export async function seedBase(prisma: PrismaClient) {
   for (const c of CUSTOMERS) {
     const existing = await prisma.customer.findFirst({ where: { name: c.name } });
     if (existing) {
-      await prisma.customer.update({ where: { id: existing.id }, data: { tier: c.tier, email: c.email } });
+      await prisma.customer.update({
+        where: { id: existing.id },
+        data: { tier: c.tier, email: c.email, currency: "INR", isActive: c.name !== "Bose Textiles" },
+      });
     } else {
-      await prisma.customer.create({ data: { name: c.name, tier: c.tier, email: c.email } });
+      await prisma.customer.create({
+        data: {
+          name: c.name,
+          tier: c.tier,
+          email: c.email,
+          currency: "INR",
+          isActive: c.name !== "Bose Textiles",
+          billingAddress:
+            c.name === "Patil Agro"
+              ? "Plot 42, MIDC Industrial Area\nBhosari, Pune 411026\nMaharashtra, India"
+              : null,
+        },
+      });
     }
   }
 
