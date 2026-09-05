@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { FormError } from "@/components/layout/form-error";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 interface Version {
   id: string;
   version: number;
@@ -88,8 +89,7 @@ export function HistoryView({
             {r.isActive ? " · Active" : ""}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {r.publishedByName} · {r.publishedAt.replace("T", " ").slice(0, 16)}{" "}
-            UTC
+            {r.publishedByName} · {formatDateTimeIST(r.publishedAt)}
           </p>
           <p className="text-sm">{r.reason ?? "No reason recorded"}</p>
           {editable && (

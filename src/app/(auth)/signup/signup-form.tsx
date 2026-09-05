@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signupAction } from "@/server/actions/auth.actions";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,11 @@ import { WarningCircle } from "@/components/icons";
 export function SignupForm() {
   const router = useRouter();
   const [state, action, pending] = useActionState(signupAction, null);
+  // Controlled so a failed submission keeps what was typed; React resets
+  // uncontrolled fields when the action state updates.
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     if (state?.ok) {
@@ -30,12 +35,27 @@ export function SignupForm() {
 
       <div className="space-y-2">
         <Label htmlFor="name">Full name</Label>
-        <Input id="name" name="name" autoComplete="name" required />
+        <Input
+          id="name"
+          name="name"
+          autoComplete="name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="email">Work email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </div>
 
       <div className="space-y-2">
@@ -47,6 +67,8 @@ export function SignupForm() {
           autoComplete="new-password"
           minLength={8}
           required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
         />
         <p className="text-muted-foreground text-xs">At least 8 characters.</p>
       </div>

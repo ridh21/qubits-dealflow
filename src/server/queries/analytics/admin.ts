@@ -23,7 +23,7 @@ export async function adminCharts({
       question:
         "How many entitlement change emails were queued each day? Global totals; team filters do not apply.",
       kind: "bar",
-      dimension: "Queued day (UTC)",
+      dimension: "Queued day (IST)",
       unit: "Messages",
       series: [{ key: "value", label: "Notices queued" }],
       rows: seriesRows({
@@ -38,7 +38,7 @@ export async function adminCharts({
       question:
         "How many audited actions occurred each day? Includes only events written to the audit log; team filters do not apply.",
       kind: "area",
-      dimension: "Day (UTC)",
+      dimension: "Day (IST)",
       unit: "Audit events",
       series: [{ key: "value", label: "Actions" }],
       rows: seriesRows({
@@ -63,7 +63,7 @@ export async function adminCharts({
         "What is the current delivery status of messages queued during this period? Team filters do not apply.",
       kind: "bar",
       stacked: true,
-      dimension: "Queued day (UTC)",
+      dimension: "Queued day (IST)",
       unit: "Messages",
       series: ["SENT", "FAILED", "QUEUED"].map((key) => ({
         key,

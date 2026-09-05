@@ -42,6 +42,11 @@ const kinds = [
   "APPROVAL_SLA",
 ];
 const label = (value: string) => value.toLowerCase().replaceAll("_", " ");
+const alertActionTitles: Record<string, string> = {
+  NUDGE: "Nudge rep",
+  ESCALATE: "Escalate",
+  RESOLVE: "Resolve alert",
+};
 export function HealthWorkspace({
   data,
   filters,
@@ -305,7 +310,7 @@ export function HealthWorkspace({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {selected ? label(selected.action) : "Alert action"}
+              {selected ? alertActionTitles[selected.action] : "Alert action"}
             </DialogTitle>
             <DialogDescription>
               Add context for the audit record and recipient.

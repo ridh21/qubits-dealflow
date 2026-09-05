@@ -102,7 +102,7 @@ export default async function SubscriptionPage({
       <p className="text-sm text-muted-foreground">
         Activation {dateLabel(s.activationDate)} · Current period{" "}
         {dateLabel(s.currentPeriodStart)} → {dateLabel(s.currentPeriodEnd)} ·
-        Dates shown in UTC
+        Dates shown in IST
       </p>
       <Schedule subscription={s} />
       <div className="grid items-start gap-8 lg:grid-cols-2">

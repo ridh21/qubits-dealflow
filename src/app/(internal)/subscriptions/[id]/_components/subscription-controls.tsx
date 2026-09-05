@@ -199,7 +199,7 @@ function CommandForm(props: Props & { command: Command; close: () => void }) {
   const descriptions: Record<Command, string> = {
     modify: "Review the live billing adjustment before applying your changes.",
     cancel: "Review when access ends and the credit that will be issued.",
-    activation: "Billing begins at activation. Choose a future date (UTC).",
+    activation: "Billing begins at activation. Choose a future date (IST).",
     pause: `Pause takes effect ${dateLabel(props.periodEnd)} — the end of the current paid period. No recurring invoices are issued while paused.`,
     resume:
       "Resume at a billing boundary after at least one complete paused cycle. A full period is billed on resume.",
@@ -346,7 +346,7 @@ function CommandForm(props: Props & { command: Command; close: () => void }) {
           )}
           {command === "activation" && (
             <label className="block space-y-2 text-sm">
-              Activation date (UTC)
+              Activation date (IST)
               <Input
                 type="date"
                 required
@@ -379,7 +379,7 @@ function CommandForm(props: Props & { command: Command; close: () => void }) {
                 </select>
               </label>
               <div className="space-y-2">
-                <p className="text-sm">Or request a later date (UTC)</p>
+                <p className="text-sm">Or request a later date (IST)</p>
                 <DatePicker
                   label="Choose requested resume date"
                   disabled={pending}

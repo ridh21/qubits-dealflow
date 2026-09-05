@@ -35,8 +35,10 @@ export function parseReportFilters(raw: unknown) {
   );
 }
 export function reportPeriod(filters: ReportFilterValues) {
-  const from = new Date(`${filters.from}T00:00:00Z`);
-  const to = new Date(`${filters.to}T00:00:00Z`);
+  // Report date ranges are interpreted on the IST wall clock (the platform's
+  // display timezone); IST is fixed at +05:30.
+  const from = new Date(`${filters.from}T00:00:00+05:30`);
+  const to = new Date(`${filters.to}T00:00:00+05:30`);
   to.setUTCDate(to.getUTCDate() + 1);
   return { from, to };
 }

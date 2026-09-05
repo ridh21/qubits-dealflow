@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -1060,7 +1061,7 @@ function NoticeHistory({
           <p className="font-medium">
             {n.tier.name} · {n.interval ? cycleLabel(n.interval) : "All cycles"}{" "}
             <span className="text-sm font-normal text-muted-foreground">
-              {n.publishedAt.replace("T", " ").slice(0, 16)} UTC
+              {formatDateTimeIST(n.publishedAt)}
             </span>
           </p>
           <p className="text-sm">

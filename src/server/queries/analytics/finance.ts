@@ -113,7 +113,7 @@ export async function financeCharts({
       question:
         "How much credit was issued and how much proration was invoiced each month? Credits are shown as positive amounts, separately from charges.",
       kind: "bar",
-      dimension: "Issue month (UTC)",
+      dimension: "Issue month (IST)",
       unit: currency,
       series: [
         { key: "credit", label: "Credit notes" },
@@ -170,7 +170,7 @@ export async function financeCharts({
       question: "How much was invoiced each month, before credit notes?",
       kind: "area",
       stacked: true,
-      dimension: "Invoice month (UTC)",
+      dimension: "Invoice month (IST)",
       unit: currency,
       series: [
         { key: "oneTime", label: "One-time & service" },
@@ -204,7 +204,7 @@ export async function financeCharts({
       question:
         "How do payments received during this period compare with invoices issued? Payments include older invoices.",
       kind: "combo",
-      dimension: "Month (UTC)",
+      dimension: "Month (IST)",
       unit: currency,
       series: [
         { key: "invoiced", label: "Invoiced" },
@@ -299,7 +299,7 @@ export async function financeCharts({
     title: "Subscription pauses and cancellations",
     question: "How many pauses and cancellations took effect each month?",
     kind: "bar",
-    dimension: "Effective month (UTC)",
+    dimension: "Effective month (IST)",
     unit: "Transitions",
     series: [
       { key: "paused", label: "Paused" },

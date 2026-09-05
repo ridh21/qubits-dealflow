@@ -52,7 +52,7 @@ describe("version history drawer", () => {
     expect(html).toContain("J. Rao");
     expect(html).toContain("USD $1.00");
     expect(html).toContain("USD $5.00");
-    expect(html).toContain("2026-09-05 00:00");
+    expect(html).toContain("2026-09-05 05:30 IST");
   });
   it("shows an initial snapshot and escapes user-controlled text", () => {
     const html = render([

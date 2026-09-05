@@ -1,11 +1,8 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 export function dateLabel(value: Date | string | null | undefined) {
   return value
-    ? new Intl.DateTimeFormat("en", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(new Date(value))
+    ? formatInTimeZone(new Date(value), "Asia/Kolkata", "d MMM yyyy")
     : "—";
 }
 export function label(value: string) {

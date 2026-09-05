@@ -10,6 +10,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { DecisionControls } from "../_components/decision-controls";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 import type { RiskBucket } from "@/domain/risk/evaluate";
 export default async function ApprovalPage({
   params,
@@ -121,7 +122,7 @@ export default async function ApprovalPage({
               {a.action.replaceAll("_", " ")} · v{a.version ?? "—"}
             </p>
             <p className="text-muted-foreground">
-              {a.createdAt.toISOString().slice(0, 16)} UTC · {a.reason ?? ""}
+              {formatDateTimeIST(a.createdAt)} · {a.reason ?? ""}
             </p>
           </div>
         ))}

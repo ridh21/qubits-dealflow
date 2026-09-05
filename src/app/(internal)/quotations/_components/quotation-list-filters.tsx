@@ -204,12 +204,12 @@ export function QuotationListFilters({
         ))}
         <DateField
           name="createdFrom"
-          label="Created from (UTC)"
+          label="Created from (IST)"
           initial={params.createdFrom}
         />
         <DateField
           name="createdTo"
-          label="Created through (UTC)"
+          label="Created through (IST)"
           initial={params.createdTo}
         />
         <Choice

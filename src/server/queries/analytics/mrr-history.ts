@@ -83,7 +83,7 @@ export async function mrrHistoryCharts({
           ? "No subscriptions match the selected scope."
           : "Monthly as-of recurring charges, net of discount and before tax; weekly × 52/12, quarterly ÷ 3, yearly ÷ 12. UTC month ends are clipped to the selected exclusive period end and now. Pending changes are excluded."),
       kind: "line",
-      dimension: "As-of month (UTC)",
+      dimension: "As-of month (IST)",
       unit: currency ? `${currency} / month` : "MRR",
       series: [{ key: "value", label: "Normalised MRR" }],
       rows: history.rows.map((row) => ({

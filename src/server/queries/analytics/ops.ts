@@ -61,7 +61,7 @@ export async function opsCharts({
       question:
         "How many backorder consolidation actions were recorded each month for matching orders?",
       kind: "bar",
-      dimension: "Action month (UTC)",
+      dimension: "Action month (IST)",
       unit: "Actions",
       series: [{ key: "value", label: "Consolidations" }],
       rows: seriesRows({
@@ -99,7 +99,7 @@ export async function opsCharts({
       question:
         "What share of each confirmation cohort has ever had a backorder?",
       kind: "line",
-      dimension: "Confirmation month (UTC)",
+      dimension: "Confirmation month (IST)",
       unit: "% of orders",
       series: [{ key: "value", label: "Backorder rate" }],
       rows: [...new Set(orders.map((o) => month(o.confirmedAt)))]
