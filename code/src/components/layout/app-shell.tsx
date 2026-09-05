@@ -35,6 +35,7 @@ export const INTERNAL_NAV: NavItem[] = [
   { href: "/invoices", label: "Invoices" },
   { href: "/deal-health", label: "Deal health" },
   { href: "/reports", label: "Reports" },
+  { href: "/analytics", label: "Analytics" },
 ];
 export const PORTAL_NAV: NavItem[] = [
   { href: "/portal", label: "My quotations" },
