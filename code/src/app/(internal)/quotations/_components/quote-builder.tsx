@@ -3,13 +3,13 @@ import { useState, useTransition, useEffect } from "react";
 import { submitQuoteAction } from "@/server/actions/approvals";
 import { PaperPlaneTilt } from "@/components/icons";
 import { useRouter } from "next/navigation";
+import { VersionHistory } from "./version-history";
 import Link from "next/link";
 import {
   Check,
   Plus,
   Repeat,
   Pencil,
-  ClockCounterClockwise,
   ArrowSquareOut,
   ArrowLeft,
   Trash,
@@ -553,29 +553,16 @@ export function QuoteBuilder({
           </div>
         </SheetContent>
       </Sheet>
-      <Dialog open={history} onOpenChange={setHistory}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              <ClockCounterClockwise aria-hidden="true" />
-              Version history
-            </DialogTitle>
-            <DialogDescription>
-              Every saved terms change is preserved.
-            </DialogDescription>
-          </DialogHeader>
-          {q.versions.map((v) => (
-            <div key={v.id} className="border-b py-3">
-              <p className="font-medium">
-                v{v.version} · {v.reason}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {new Date(v.createdAt).toISOString().slice(0, 16)} UTC
-              </p>
-            </div>
-          ))}
-        </DialogContent>
-      </Dialog>
+      <VersionHistory
+        open={history}
+        onOpenChange={setHistory}
+        versions={q.versions}
+        actorNames={{
+          [q.ownerId]: q.owner.name,
+          [actor.id]: actor.name ?? "You",
+        }}
+        customerNames={{ [q.customerId]: q.customer.name }}
+      />
       <Dialog
         open={!!operation}
         onOpenChange={(open) => {
