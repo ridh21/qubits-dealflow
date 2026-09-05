@@ -23,6 +23,7 @@ export default async function ReportsPage({
   }
   return (
     <ReportWorkspace
+      key={JSON.stringify(filters)}
       options={options}
       report={report}
       error={error}
