@@ -29,8 +29,10 @@ export default async function QuotationPage({
         title={`${data.quote.number} · v${data.quote.version}`}
         description="Quotation workspace"
       />
+      {/* Keyed on the version so a new revision remounts the editor and drops
+          local draft state. Siblings need distinct keys, hence the prefixes. */}
       <QuoteBuilder
-        key={`${id}:${data.quote.version}`}
+        key={`builder:${id}:${data.quote.version}`}
         data={data}
         products={products}
         customers={customers}
@@ -44,7 +46,7 @@ export default async function QuotationPage({
       />
       {canEditQuotation(data.quote, data.actor) && (
         <UpsellPanel
-          key={`${id}:${data.quote.version}`}
+          key={`upsell:${id}:${data.quote.version}`}
           items={suggestions}
           id={id}
           version={data.quote.version}

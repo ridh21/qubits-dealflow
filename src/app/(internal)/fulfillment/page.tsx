@@ -1,66 +1,108 @@
-import Link from "next/link";
 import { listFulfillment } from "@/server/queries/fulfillment";
 import { PageHeader } from "@/components/layout/page-header";
-import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-export default async function FulfillmentPage() {
-  const rows = await listFulfillment();
+import { DataTable, type Column } from "@/components/data-table/data-table";
+import { FiltersBar } from "@/components/filters/filters-bar";
+import { SearchInput } from "@/components/filters/search-input";
+import { SelectFilter } from "@/components/filters/select-filter";
+import { StatusBadge } from "@/components/layout/status-badge";
+import { Truck } from "@/components/icons";
+
+export const metadata = { title: "Fulfillment · DealFlow360" };
+
+type Row = Awaited<ReturnType<typeof listFulfillment>>["rows"][number];
+
+export default async function FulfillmentPage({
+  searchParams,
+}: PageProps<"/fulfillment">) {
+  const sp = await searchParams;
+  const { rows, total, page, pageSize, pageCount } = await listFulfillment(sp);
+
+  const columns: Column<Row>[] = [
+    { key: "number", header: "Order", sortable: true, cell: (o) => o.number },
+    { key: "customer", header: "Customer", cell: (o) => o.customer.name },
+    {
+      key: "fulfillmentStatus",
+      header: "Fulfillment",
+      sortable: true,
+      cell: (o) => <StatusBadge value={o.fulfillmentStatus} />,
+    },
+    {
+      key: "status",
+      header: "Order",
+      cell: (o) => <StatusBadge value={o.status} />,
+    },
+    {
+      key: "lines",
+      header: "Lines",
+      align: "right",
+      cell: (o) => <span className="tabular">{o.lines.length}</span>,
+    },
+    {
+      key: "promisedDeliveryDate",
+      header: "Promised delivery",
+      sortable: true,
+      align: "right",
+      cell: (o) =>
+        o.promisedDeliveryDate ? (
+          <span className="tabular text-muted-foreground">
+            {o.promisedDeliveryDate.toISOString().slice(0, 10)}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">Not set</span>
+        ),
+    },
+  ];
+
   return (
     <>
       <PageHeader
         title="Fulfillment"
         description="Reserve stock, dispatch goods and record completed services."
       />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {[
-              "Order",
-              "Customer",
-              "Fulfillment",
-              "Lines",
-              "Promised delivery",
-            ].map((h) => (
-              <TableHead key={h}>{h}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((o) => (
-            <TableRow key={o.id}>
-              <TableCell>
-                <Link
-                  href={`/fulfillment/${o.id}`}
-                  className="underline font-medium"
-                >
-                  {o.number}
-                </Link>
-              </TableCell>
-              <TableCell>{o.customer.name}</TableCell>
-              <TableCell>{o.fulfillmentStatus.replaceAll("_", " ")}</TableCell>
-              <TableCell>{o.lines.length}</TableCell>
-              <TableCell>
-                {o.promisedDeliveryDate?.toISOString().slice(0, 10) ??
-                  "Not set"}
-              </TableCell>
-            </TableRow>
-          ))}
-          {!rows.length && (
-            <TableRow>
-              <TableCell colSpan={5}>
-                No orders yet. Orders appear after the customer accepts a
-                policy-cleared quotation.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+
+      <FiltersBar>
+        <SearchInput placeholder="Search order or customer…" />
+        <SelectFilter
+          param="fulfillmentStatus"
+          label="Fulfillment"
+          width="w-[190px]"
+          options={[
+            { value: "UNALLOCATED", label: "Unallocated" },
+            { value: "RESERVED", label: "Reserved" },
+            { value: "PARTIALLY_FULFILLED", label: "Partially fulfilled" },
+            { value: "BACKORDERED", label: "Backordered" },
+            { value: "FULFILLED", label: "Fulfilled" },
+          ]}
+        />
+        <SelectFilter
+          param="status"
+          label="Order status"
+          width="w-[160px]"
+          options={[
+            { value: "OPEN", label: "Open" },
+            { value: "COMPLETED", label: "Completed" },
+            { value: "CANCELLED", label: "Cancelled" },
+          ]}
+        />
+      </FiltersBar>
+
+      <DataTable
+        columns={columns}
+        rows={rows}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        pageCount={pageCount}
+        caption="Orders awaiting fulfillment"
+        getRowKey={(o) => o.id}
+        getRowHref={(o) => `/fulfillment/${o.id}`}
+        empty={{
+          title: "No orders match these filters",
+          description:
+            "Orders appear once a customer accepts a policy-cleared quotation.",
+          icon: <Truck className="size-5" weight="duotone" />,
+        }}
+      />
     </>
   );
 }

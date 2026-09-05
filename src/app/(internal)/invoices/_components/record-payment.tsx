@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CurrencyDollar } from "@/components/icons";
+import { CurrencyInr } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/forms/money-input";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
 import { recordPaymentAction } from "@/server/actions/payments";
+import { FormError } from "@/components/layout/form-error";
 export function RecordPayment({
   invoiceId,
   balance,
@@ -47,7 +48,7 @@ export function RecordPayment({
             setOpen(true);
           }}
         >
-          <CurrencyDollar />
+          <CurrencyInr />
           Record payment
         </Button>
       </WorkspaceActions>
@@ -88,9 +89,7 @@ export function RecordPayment({
             value={reference}
             onChange={(e) => setReference(e.target.value)}
           />
-          <p role="alert" className="text-destructive text-sm">
-            {error}
-          </p>
+          <FormError message={error} />
           <Button
             disabled={pending || amount <= 0 || amount > balance}
             onClick={() =>

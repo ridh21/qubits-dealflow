@@ -1,0 +1,23 @@
+# Local development database. Replaces the hosted Neon instance:
+#   pnpm db:up        # starts postgres and waits until it's healthy
+#   pnpm db:setup     # applies migrations + runs prisma/seed.ts
+# Data persists in the dealflow_pgdata volume; `down -v` wipes it.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dealflow
+      POSTGRES_PASSWORD: dealflow_dev
+      POSTGRES_DB: dealflow_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - dealflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dealflow -d dealflow_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  dealflow_pgdata:

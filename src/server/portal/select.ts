@@ -133,6 +133,8 @@ export const PORTAL_INVOICE_SELECT = {
   totalMinor: true,
   paidMinor: true,
   creditAppliedMinor: true,
+  balanceMinor: true,
+  paymentStatus: true,
   lines: {
     select: {
       id: true,

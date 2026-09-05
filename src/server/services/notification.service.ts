@@ -27,6 +27,13 @@ export async function notifyUser(tx: Tx, userId: string, n: Notice) {
   });
   return row;
 }
+/**
+ * Fan-out in three queries rather than three per recipient.
+ *
+ * The previous loop called notifyUser per user, which re-read each user that
+ * this very query had already filtered on `isActive`, then issued a notification
+ * insert and an email insert one row at a time.
+ */
 export async function notifyRole(
   tx: Tx,
   role: Role,
@@ -39,9 +46,25 @@ export async function notifyRole(
       isActive: true,
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
-    select: { id: true },
+    select: { id: true, email: true },
   });
-  for (const user of users) await notifyUser(tx, user.id, n);
+  if (!users.length) return;
+
+  // createManyAndReturn gives back the ids the email rows need to reference.
+  const rows = await tx.notification.createManyAndReturn({
+    data: users.map((user) => ({ userId: user.id, ...n })),
+    select: { id: true, userId: true },
+  });
+  const emailFor = new Map(users.map((u) => [u.id, u.email]));
+  await tx.emailMessage.createMany({
+    data: rows.map((row) => ({
+      toEmail: emailFor.get(row.userId)!,
+      subject: n.title,
+      textBody: n.body,
+      relatedType: "Notification",
+      relatedId: row.id,
+    })),
+  });
 }
 export async function markRead(actor: SessionUser, id: string) {
   return withTx(async (tx) => {

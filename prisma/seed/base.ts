@@ -1,4 +1,5 @@
-import { PrismaClient, type Role, type CustomerTier } from "@prisma/client";
+import { type Role, type CustomerTier } from "@prisma/client";
+import type { DbClient } from "@/server/db";
 import bcrypt from "bcryptjs";
 
 const DEFAULT_PASSWORD = "Password123!";
@@ -40,7 +41,7 @@ const PORTAL_USERS = [
   { customer: "Reddy Systems", email: "deepa.reddy@yopmail.com", name: "Deepa Reddy" },
 ];
 
-export async function seedBase(prisma: PrismaClient) {
+export async function seedBase(prisma: DbClient) {
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
   const team = await prisma.team.upsert({

@@ -1,9 +1,9 @@
-import { formatBp, formatMinor } from "@/domain/money/money";
+import { DEFAULT_CURRENCY, formatBp, formatMinor } from "@/domain/money/money";
 import { cn } from "@/lib/utils";
 
 export function Money({
   minor,
-  currency = "USD",
+  currency = DEFAULT_CURRENCY,
   className,
 }: {
   minor: number;

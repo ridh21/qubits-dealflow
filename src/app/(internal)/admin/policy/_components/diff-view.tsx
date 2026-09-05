@@ -30,7 +30,7 @@ export function DiffView({
     return <p className="text-sm text-muted-foreground">No changes.</p>;
   return (
     <div className="max-h-80 overflow-auto rounded-md border">
-      <Table>
+      <Table containerClassName="rounded-none border-0">
         <TableHeader>
           <TableRow>
             <TableHead>Setting</TableHead>

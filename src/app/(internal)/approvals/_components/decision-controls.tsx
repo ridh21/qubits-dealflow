@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { decideApprovalAction } from "@/server/actions/approvals";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
+import { FormError } from "@/components/layout/form-error";
 export function DecisionControls({
   stepId,
   version,
@@ -84,9 +85,7 @@ export function DecisionControls({
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
-          <p role="alert" className="text-destructive text-sm">
-            {error}
-          </p>
+          <FormError message={error} />
           <Button
             disabled={pending || (decision !== "APPROVE" && !note.trim())}
             onClick={() =>

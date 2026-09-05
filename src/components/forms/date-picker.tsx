@@ -10,6 +10,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 /** UI dates use local calendar days; services decide the business timezone. */
 export function DatePicker({
@@ -18,15 +20,20 @@ export function DatePicker({
   label,
   disabled,
   fromDate,
+  hideLabel,
+  className,
 }: {
   value?: Date;
   onChange: (date: Date | undefined) => void;
   label: string;
   disabled?: boolean;
   fromDate?: Date;
+  /** Drop the visible label where the surrounding layout already names it. */
+  hideLabel?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  return (
+  const trigger = (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
@@ -34,10 +41,16 @@ export function DatePicker({
           variant="outline"
           disabled={disabled}
           aria-label={label}
-          className="justify-start font-normal"
+          className={cn("w-full justify-start font-normal", className)}
         >
           <CalendarBlank className="size-4" />
-          {value ? format(value, "d MMM yyyy") : label}
+          {/* Once a date is chosen the button shows the date, so without a
+              standing label the field would no longer say what it is. */}
+          {value ? (
+            format(value, "d MMM yyyy")
+          ) : (
+            <span className="text-muted-foreground">Select a date</span>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
@@ -66,5 +79,13 @@ export function DatePicker({
         )}
       </PopoverContent>
     </Popover>
+  );
+
+  if (hideLabel) return trigger;
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {trigger}
+    </div>
   );
 }

@@ -59,8 +59,21 @@ export function allocateProportional(totalMinor: number, weights: number[]): num
   return out;
 }
 
-export function formatMinor(amountMinor: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
+/**
+ * Amounts are quoted, invoiced and reported in rupees unless the record carries
+ * its own currency. Other currencies still format correctly; this only decides
+ * what an unlabelled amount means.
+ */
+export const DEFAULT_CURRENCY = "INR";
+
+/** Indian digit grouping (1,23,456.00) only happens under an en-IN locale. */
+const CURRENCY_LOCALES: Record<string, string> = { INR: "en-IN" };
+
+export function formatMinor(
+  amountMinor: number,
+  currency = DEFAULT_CURRENCY,
+): string {
+  return new Intl.NumberFormat(CURRENCY_LOCALES[currency] ?? "en-US", {
     style: "currency",
     currency,
     minimumFractionDigits: 2,
@@ -76,4 +89,25 @@ export function parseMoneyToMinor(input: string | number): number {
   const n = typeof input === "number" ? input : Number(String(input).replace(/[^0-9.-]/g, ""));
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
+}
+
+/** Offered in currency pickers; the default is listed first deliberately. */
+export const SUPPORTED_CURRENCIES = [
+  { code: "INR", label: "Indian Rupee" },
+  { code: "USD", label: "US Dollar" },
+  { code: "EUR", label: "Euro" },
+  { code: "GBP", label: "Pound Sterling" },
+  { code: "AED", label: "UAE Dirham" },
+  { code: "SGD", label: "Singapore Dollar" },
+  { code: "AUD", label: "Australian Dollar" },
+  { code: "JPY", label: "Japanese Yen" },
+] as const;
+
+/** The bare symbol, for adorning inputs where a full amount is not formatted. */
+export function currencySymbol(currency = DEFAULT_CURRENCY): string {
+  const parts = new Intl.NumberFormat(CURRENCY_LOCALES[currency] ?? "en-US", {
+    style: "currency",
+    currency,
+  }).formatToParts(0);
+  return parts.find((p) => p.type === "currency")?.value ?? currency;
 }

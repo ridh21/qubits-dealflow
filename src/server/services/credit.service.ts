@@ -2,6 +2,7 @@ import type { Tx } from "@/server/db";
 import { lockRow } from "@/server/db";
 import { nextNumber } from "@/server/sequences";
 import { writeAudit } from "@/server/audit";
+import { settleInvoiceTotals } from "./invoice-settlement";
 import { Conflict, ValidationError } from "@/domain/errors";
 export async function issueCreditNote(
   tx: Tx,
@@ -146,10 +147,11 @@ export async function applyAvailableCredits(tx: Tx, invoiceId: string) {
       where: { id: credit.id },
       data: { remainingMinor: { decrement: amount } },
     });
-    invoice = await tx.invoice.update({
+    await tx.invoice.update({
       where: { id: invoiceId },
       data: { creditAppliedMinor: { increment: amount } },
     });
+    invoice = await settleInvoiceTotals(tx, invoiceId);
     await writeAudit(tx, {
       actorType: "SYSTEM",
       entityType: "CreditNote",

@@ -41,6 +41,7 @@ import {
 import { Truck, Check, Package, Repeat, Pencil } from "@/components/icons";
 import { formatMinor } from "@/domain/money/money";
 import type { ActionResult } from "@/domain/errors";
+import { FormError } from "@/components/layout/form-error";
 export function OrderWorkspace({
   data: { order: o, actor, warehouses },
 }: {
@@ -133,9 +134,7 @@ export function OrderWorkspace({
           Reload stock
         </Button>
       </WorkspaceActions>
-      <p role="alert" className="text-destructive text-sm">
-        {error}
-      </p>
+      <FormError message={error} />
       {o.plan && (
         <p className="rounded-lg border p-4">
           {o.plan.status} · {o.plan.estimatedShipments} estimated shipments ·{" "}
@@ -366,7 +365,7 @@ export function OrderWorkspace({
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
-          <p role="alert">{error}</p>
+          <FormError message={error} />
           <Button
             disabled={pending || !note.trim()}
             onClick={() =>

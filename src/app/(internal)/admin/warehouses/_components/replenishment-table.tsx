@@ -155,7 +155,7 @@ export function ReplenishmentTable({
           <p className="text-muted-foreground text-sm">No replenishment planned for this warehouse.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
+            <Table containerClassName="rounded-none border-0">
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead>Product</TableHead>

@@ -59,14 +59,16 @@ describe("quotation builder rendering", () => {
       "Apply customer change",
       "Save changes",
       "Version history",
-      "Reload data",
-      "Close workspace",
     ])
       expect(sidebar).toContain(action);
     expect(html).toContain('role="combobox"');
     expect(html).toContain('aria-label="Customer"');
     expect(html).toContain("Alpha · GOLD");
+    // Navigation the sidebar already provides was removed from the toolbar.
     expect(html).not.toContain("Go to back-end");
+    expect(html).not.toContain("Close workspace");
+    // "Reload data" only appears as "Discard changes", and only when dirty.
+    expect(html).not.toContain("Reload data");
   });
   it("does not offer customer edits or revision actions to finance", () => {
     const html = render("FINANCE", "SENT");
@@ -75,9 +77,10 @@ describe("quotation builder rendering", () => {
     expect(html).not.toContain("Create revision</button>");
     expect(html).not.toContain("Go to back-end");
   });
-  it("shows the admin back-end link but respects owner-only pending withdrawal", () => {
+  it("respects owner-only pending withdrawal and offers no back-end shortcut", () => {
     const html = render("ADMIN", "PENDING_APPROVAL", "admin");
-    expect(html).toContain("Go to back-end");
+    // Admins reach the back end from the sidebar, not from every quotation.
+    expect(html).not.toContain("Go to back-end");
     expect(html).not.toContain("Create revision</button>");
     expect(html).not.toContain("Apply customer change");
   });

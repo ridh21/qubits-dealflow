@@ -15,9 +15,18 @@ export async function lockWarehouseRows(
   ids: string[],
   requireActive = true,
 ) {
-  for (const id of [...new Set(ids)].sort()) {
-    await lockRow(tx, "Warehouse", id);
-    const warehouse = await tx.warehouse.findUnique({ where: { id } });
+  const unique = [...new Set(ids)].sort();
+  // Locks stay sequential and sorted - that ordering is what prevents deadlock.
+  for (const id of unique) await lockRow(tx, "Warehouse", id);
+
+  // The validation reads do not need to be per-warehouse, so they are one query.
+  const warehouses = await tx.warehouse.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, isActive: true },
+  });
+  const byId = new Map(warehouses.map((w) => [w.id, w]));
+  for (const id of unique) {
+    const warehouse = byId.get(id);
     if (!warehouse) throw new NotFound("Warehouse unavailable.");
     if (requireActive && !warehouse.isActive)
       throw new ValidationError(

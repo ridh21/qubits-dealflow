@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
 import { Plus } from "@/components/icons";
+import { FormError } from "@/components/layout/form-error";
 export function CreateQuote({
   customers,
 }: {
@@ -53,9 +54,7 @@ export function CreateQuote({
         The customer’s tier and price list determine catalogue pricing and
         discount ceilings.
       </p>
-      <p role="alert" className="text-sm text-destructive">
-        {error}
-      </p>
+      <FormError message={error} />
       <WorkspaceActions>
         <Button disabled={!id || pending} type="submit" form={formId}>
           <Plus aria-hidden="true" />

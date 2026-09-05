@@ -15,6 +15,15 @@ import { useRouter } from "next/navigation";
 import type { suggestionsFor } from "@/server/services/upsell.service";
 import { addQuoteLineAction } from "@/server/actions/quotations";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { WarningCircle } from "@/components/icons";
 import { formatMinor } from "@/domain/money/money";
 export function UpsellPanel({
   items,
@@ -50,14 +59,22 @@ export function UpsellPanel({
     router = useRouter();
   if (!items.length) return null;
   return (
-    <section className="space-y-4 rounded-xl border p-5">
-      <h2 className="text-lg font-semibold">Suggested additions</h2>
-      <p className="text-sm text-muted-foreground">
-        Dismissed suggestions stay hidden for this revision on this browser.
-      </p>
-      <p role="alert">{error}</p>
+    <Card>
+      <CardHeader>
+        <CardTitle>Suggested additions</CardTitle>
+        <CardDescription>
+          Dismissed suggestions stay hidden for this revision on this browser.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+      {error ? (
+        <Alert variant="destructive">
+          <WarningCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
       {items.every((item) => dismissed.includes(item.productId)) && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           All suggestions dismissed for this revision.
         </p>
       )}
@@ -66,7 +83,7 @@ export function UpsellPanel({
         .map((i) => (
           <div
             key={i.productId}
-            className="flex flex-wrap items-center justify-between gap-4"
+            className="flex flex-wrap items-center justify-between gap-4 rounded-lg border p-3"
           >
             <div>
               <p className="font-medium">
@@ -109,6 +126,7 @@ export function UpsellPanel({
             </div>
           </div>
         ))}
-    </section>
+      </CardContent>
+    </Card>
   );
 }

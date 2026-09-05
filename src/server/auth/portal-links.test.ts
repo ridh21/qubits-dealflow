@@ -28,6 +28,7 @@ describe("published portal credential lifetime", () => {
       name: "Customer",
       isActive: true,
     });
+    mocks.queue.mockResolvedValue({ id: "queued-message" });
   });
   afterEach(() => vi.useRealTimers());
   it.each([1, 30])(
@@ -38,9 +39,10 @@ describe("published portal credential lifetime", () => {
       });
       await issuePortalLink(`ttl-${minutes}@example.test`);
       expect(mocks.policy).toHaveBeenCalledWith(mocks.tx, "PORTAL");
-      expect(
-        mocks.tx.verificationToken.create.mock.calls[0][0].data.expires,
-      ).toEqual(new Date(Date.now() + minutes * 60000));
+      const created = mocks.tx.verificationToken.create.mock.calls[0][0].data;
+      expect(created.expires).toEqual(new Date(Date.now() + minutes * 60000));
+      // The integer column is what expiry is actually compared against.
+      expect(created.expiresAtUnix).toBe(BigInt(Date.now() + minutes * 60000));
       expect(mocks.queue.mock.calls[0][1].text).toContain(
         `expires in ${minutes} minutes`,
       );
@@ -58,7 +60,7 @@ describe("published portal credential lifetime", () => {
     mocks.user.mockResolvedValue(null);
     expect(await issuePortalLink("unknown@example.test")).toEqual({
       issued: false,
-      devLink: null,
+      messageId: null,
     });
     expect(mocks.policy).not.toHaveBeenCalled();
     expect(mocks.user.mock.calls[0][0].where).toMatchObject({

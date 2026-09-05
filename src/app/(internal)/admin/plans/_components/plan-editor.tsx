@@ -62,6 +62,7 @@ import type {
   listPlanNoticeHistory,
 } from "@/server/queries/plans";
 import type { EntitlementDraft } from "@/server/services/entitlement.service";
+import { DEFAULT_CURRENCY } from "@/domain/money/money";
 import {
   createTierAction,
   updateTierAction,
@@ -232,7 +233,7 @@ export function PlanEditor({
         </TabsList>
         <TabsContent value="prices">
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
+            <Table containerClassName="rounded-none border-0">
               <TableHeader>
                 <TableRow>
                   <TableHead>Tier</TableHead>
@@ -293,7 +294,7 @@ export function PlanEditor({
         </TabsContent>
         <TabsContent value="entitlements">
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
+            <Table containerClassName="rounded-none border-0">
               <TableHeader>
                 <TableRow>
                   <TableHead rowSpan={2}>Entitlement</TableHead>
@@ -648,7 +649,7 @@ function PriceCell({
             );
           }}
         >
-          <Field label="Price (USD)">
+          <Field label={`Price (${DEFAULT_CURRENCY})`}>
             <Input
               required
               type="number"

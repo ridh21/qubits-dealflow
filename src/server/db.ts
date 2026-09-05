@@ -1,17 +1,29 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import type { ITXClientDenyList } from "@prisma/client/runtime/library";
+import { softDeleteExtension } from "./soft-delete";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createClient() {
+  return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
+  }).$extends(softDeleteExtension);
+}
+
+type ExtendedClient = ReturnType<typeof createClient>;
+
+/** The soft-delete-extended client. Tests construct their own of this shape. */
+export type DbClient = ExtendedClient;
+
+const globalForPrisma = globalThis as unknown as { prisma?: ExtendedClient };
+
+export const prisma = globalForPrisma.prisma ?? createClient();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-/** Transaction client passed through every service. */
-export type Tx = Prisma.TransactionClient;
+/**
+ * Transaction client passed through every service. Derived from the extended
+ * client so `tx` reads are filtered by the soft-delete extension too.
+ */
+export type Tx = Omit<ExtendedClient, ITXClientDenyList>;
 
 /**
  * Run `fn` inside a single transaction. Services never open nested

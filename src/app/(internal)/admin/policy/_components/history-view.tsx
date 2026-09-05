@@ -15,6 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { FormError } from "@/components/layout/form-error";
 interface Version {
   id: string;
   version: number;
@@ -133,9 +134,7 @@ export function HistoryView({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
-          <p role="alert" className="text-sm text-destructive">
-            {message}
-          </p>
+          <FormError message={message} />
           <DialogFooter>
             <Button
               variant="outline"

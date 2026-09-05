@@ -87,7 +87,7 @@ function RiskResult({ result, title }: { result: SimResult; title: string }) {
               .join(" → ")
           : "No approval required"}
       </p>
-      <Table>
+      <Table containerClassName="rounded-none border-0">
         <TableHeader>
           <TableRow>
             <TableHead>Line</TableHead>

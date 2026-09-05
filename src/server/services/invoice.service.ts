@@ -3,6 +3,7 @@ import { proportionalSlice } from "@/domain/billing/invoice-lines";
 import type { Tx } from "@/server/db";
 import { nextNumber } from "@/server/sequences";
 import { writeAudit } from "@/server/audit";
+import { derivePaymentStatus } from "@/domain/billing/payment-status";
 import { ValidationError } from "@/domain/errors";
 import { getActivePolicy } from "./policy.service";
 interface InvoiceInput {
@@ -36,6 +37,13 @@ export async function issueInvoice(tx: Tx, input: InvoiceInput) {
     taxMinor = input.lines.reduce((s, l) => s + l.taxMinor, 0);
   if (subtotalMinor < 0 || taxMinor < 0)
     throw new ValidationError("An invoice cannot have a negative amount.");
+  const totalMinor = subtotalMinor + taxMinor;
+  // A brand-new invoice has no payments or credits, but the settlement columns
+  // are still written here so no row exists in an unsettled state.
+  const settlement = derivePaymentStatus(
+    { totalMinor, paidMinor: 0, creditAppliedMinor: 0, dueAt: null },
+    new Date(),
+  );
   const invoice = await tx.invoice.create({
     data: {
       customerId: input.customerId,
@@ -51,7 +59,9 @@ export async function issueInvoice(tx: Tx, input: InvoiceInput) {
       ),
       subtotalMinor,
       taxMinor,
-      totalMinor: subtotalMinor + taxMinor,
+      totalMinor,
+      balanceMinor: settlement.balanceMinor,
+      paymentStatus: settlement.paymentStatus,
       lines: { create: input.lines },
     },
   });

@@ -95,14 +95,24 @@ async function suggestPlanInTx(
       throw new Conflict(
         "Only an unreserved suggested plan can be recomputed.",
       );
-    await tx.backorder.deleteMany({
+    await tx.backorder.updateMany({
       where: {
         orderLine: { orderId },
         status: { in: ["OPEN", "CONSOLIDATION_SUGGESTED"] },
+        deletedAt: null,
       },
+      data: { deletedAt: new Date() },
     });
-    // The order has one live plan. Superseded unreserved proposals are retained in audit below.
-    await tx.fulfillmentPlan.delete({ where: { id: order.plan.id } });
+    // The order has one live plan. Superseded unreserved proposals are retained
+    // in audit below, and their allocations go with them.
+    await tx.allocation.updateMany({
+      where: { planId: order.plan.id, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    await tx.fulfillmentPlan.update({
+      where: { id: order.plan.id },
+      data: { deletedAt: new Date() },
+    });
   }
   const policy = await getActivePolicy(tx, "FULFILLMENT"),
     plan = planSplit(
@@ -115,13 +125,33 @@ async function suggestPlanInTx(
       await warehouseStock(tx),
       policy.payload,
     );
-  const row = await tx.fulfillmentPlan.create({
-    data: {
+  // One plan row per order (orderId is unique), so a replan revives and
+  // overwrites the retired row rather than inserting a second one.
+  const planFields = {
+    estimatedShipments: plan.shipments,
+    estimatedCostMinor: plan.estimatedCostMinor,
+    rationale: plan as unknown as Prisma.InputJsonValue,
+    policyVersionId: policy.id,
+  };
+  const row = await tx.fulfillmentPlan.upsert({
+    where: { orderId },
+    create: {
       orderId,
-      estimatedShipments: plan.shipments,
-      estimatedCostMinor: plan.estimatedCostMinor,
-      rationale: plan as unknown as Prisma.InputJsonValue,
-      policyVersionId: policy.id,
+      ...planFields,
+      allocations: {
+        create: plan.allocations.map((a) => ({
+          orderLineId: a.orderLineId,
+          warehouseId: a.warehouseId,
+          qty: a.qty,
+        })),
+      },
+    },
+    update: {
+      ...planFields,
+      status: "SUGGESTED",
+      decidedAt: null,
+      decidedById: null,
+      deletedAt: null,
       allocations: {
         create: plan.allocations.map((a) => ({
           orderLineId: a.orderLineId,
@@ -333,16 +363,26 @@ export async function markShipped(actor: SessionUser, shipmentId: string) {
         productId: l.orderLine.productId,
       })),
     );
+    // Reserved allocations for every line of this shipment in one read; the
+    // writes below stay per-allocation because each decrements its own row.
+    const allReserved = await tx.allocation.findMany({
+      where: {
+        plan: { orderId: shipment.orderId },
+        warehouseId: shipment.warehouseId,
+        orderLineId: { in: shipment.lines.map((l) => l.orderLineId) },
+        reserved: true,
+      },
+      orderBy: { id: "asc" },
+    });
+    const reservedByLine = new Map<string, typeof allReserved>();
+    for (const a of allReserved) {
+      const bucket = reservedByLine.get(a.orderLineId) ?? [];
+      bucket.push(a);
+      reservedByLine.set(a.orderLineId, bucket);
+    }
+
     for (const line of shipment.lines) {
-      const allocations = await tx.allocation.findMany({
-        where: {
-          plan: { orderId: shipment.orderId },
-          warehouseId: shipment.warehouseId,
-          orderLineId: line.orderLineId,
-          reserved: true,
-        },
-        orderBy: { id: "asc" },
-      });
+      const allocations = reservedByLine.get(line.orderLineId) ?? [];
       let remaining = line.qty;
       for (const a of allocations) {
         const qty = Math.min(remaining, a.qty - a.qtyShipped);
@@ -508,9 +548,13 @@ export async function overridePlan(
           throw new ValidationError("Allocation exceeds available stock.");
       }
     }
-    await tx.allocation.deleteMany({ where: { planId: order.plan.id } });
-    await tx.backorder.deleteMany({
-      where: { orderLine: { orderId }, status: "OPEN" },
+    await tx.allocation.updateMany({
+      where: { planId: order.plan.id, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    await tx.backorder.updateMany({
+      where: { orderLine: { orderId }, status: "OPEN", deletedAt: null },
+      data: { deletedAt: new Date() },
     });
     for (const a of allocations)
       await tx.allocation.create({ data: { ...a, planId: order.plan.id } });

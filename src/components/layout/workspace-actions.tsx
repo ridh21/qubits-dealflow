@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { SidebarGroup, SidebarGroupLabel } from "@/components/ui/sidebar";
 
 const ActionsContext = createContext<{
   target: HTMLDivElement | null;
@@ -22,20 +21,24 @@ export function WorkspaceActionsProvider({
   );
 }
 
+/** Rendered once, in the workspace toolbar above the page content. */
 export function WorkspaceActionsSlot() {
   const context = useContext(ActionsContext);
-  return <div ref={context?.setTarget} />;
+  return <div ref={context?.setTarget} className="contents" />;
 }
 
-/** The ref keeps commands connected when the mobile drawer mounts or closes. */
+/**
+ * Page-level commands. They render into the toolbar beside the content they
+ * act on rather than into the sidebar, which is navigation only.
+ * The ref keeps commands connected across route changes.
+ */
 export function WorkspaceActions({ children }: { children: ReactNode }) {
   const context = useContext(ActionsContext);
   return context?.target
     ? createPortal(
-        <SidebarGroup>
-          <SidebarGroupLabel>Actions</SidebarGroupLabel>
-          <div className="flex flex-col gap-2">{children}</div>
-        </SidebarGroup>,
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {children}
+        </div>,
         context.target,
       )
     : null;

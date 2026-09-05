@@ -1,7 +1,7 @@
 import { emit } from "@/server/events";
 import { Prisma, type Quotation } from "@prisma/client";
 import type { z } from "zod";
-import { withTx, lockRow, type Tx } from "@/server/db";
+import { prisma, withTx, lockRow, type Tx } from "@/server/db";
 import { writeAudit } from "@/server/audit";
 import { nextNumber } from "@/server/sequences";
 import type { SessionUser } from "@/server/auth/guards";
@@ -14,6 +14,7 @@ import {
 } from "@/domain/errors";
 import { resolveUnitPrice } from "@/domain/pricing/resolve-price";
 import { termsHash } from "@/domain/quotation/terms-hash";
+import { DEFAULT_CURRENCY } from "@/domain/money/money";
 import {
   AddQuoteLineInput,
   CreateQuoteInput,
@@ -119,6 +120,40 @@ async function finishEdit(
   });
   return { id: q.id, version: q.version + 1 };
 }
+/** Most recently quoted customer for this owner, else any active customer. */
+async function defaultCustomerFor(tx: Tx, actor: SessionUser) {
+  const recent = await tx.quotation.findFirst({
+    where: { ownerId: actor.id, customer: { isActive: true } },
+    orderBy: { createdAt: "desc" },
+    select: { customer: { include: { priceList: true } } },
+  });
+  if (recent?.customer) return recent.customer;
+  return tx.customer.findFirst({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: { priceList: true },
+  });
+}
+
+/**
+ * Starts a draft in one click, with no customer chosen up front.
+ *
+ * This is a separate entry point rather than making `customerId` optional on
+ * CreateQuoteInput: "create a quotation for this customer" should keep failing
+ * loudly when the customer is missing. Here the omission is the whole point, so
+ * the customer is resolved first and the normal create path runs unchanged.
+ */
+export async function startDraftQuotation(actor: SessionUser) {
+  if (!SALES_ROLES.includes(actor.role as (typeof SALES_ROLES)[number]))
+    throw new Forbidden();
+  const customer = await defaultCustomerFor(prisma, actor);
+  if (!customer)
+    throw new ValidationError(
+      "No active customer exists yet. Add a customer before quoting.",
+    );
+  return createQuotation(actor, { customerId: customer.id });
+}
+
 export async function createQuotation(
   actor: SessionUser,
   raw: z.infer<typeof CreateQuoteInput>,
@@ -140,7 +175,7 @@ export async function createQuotation(
         customerId: customer.id,
         ownerId: actor.id,
         priceListId: customer.priceListId,
-        currency: customer.priceList?.currency ?? "USD",
+        currency: customer.priceList?.currency ?? customer.currency ?? DEFAULT_CURRENCY,
         validUntil:
           input.validUntil ??
           new Date(Date.now() + portal.payload.quoteValidityDays * 86400000),
@@ -329,7 +364,10 @@ export async function removeLine(
       where: { id: lineId, quotationId: id },
     });
     if (!line) throw new NotFound("Line no longer exists.");
-    await tx.quotationLine.delete({ where: { id: lineId } });
+    await tx.quotationLine.update({
+      where: { id: lineId },
+      data: { deletedAt: new Date() },
+    });
     await writeAudit(tx, {
       actorId: actor.id,
       actorType: "USER",
@@ -500,7 +538,7 @@ export async function setCustomer(
       data: {
         customerId,
         priceListId: customer.priceListId,
-        currency: customer.priceList?.currency ?? "USD",
+        currency: customer.priceList?.currency ?? customer.currency ?? DEFAULT_CURRENCY,
       },
     });
     for (const line of await tx.quotationLine.findMany({

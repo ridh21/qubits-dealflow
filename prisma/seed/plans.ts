@@ -1,4 +1,6 @@
 import { PrismaClient, type RecurringInterval } from "@prisma/client";
+import { softDeleteExtension } from "@/server/soft-delete";
+import type { DbClient } from "@/server/db";
 import { pathToFileURL } from "node:url";
 
 // Plan prices are INR minor units (paise) and must stay aligned with the
@@ -45,7 +47,7 @@ const products = [
 ];
 
 /** Additive and repeatable: rerunning a demo seed never replaces admin edits. */
-export async function seedPlans(prisma: PrismaClient) {
+export async function seedPlans(prisma: DbClient) {
   const category = await prisma.category.upsert({
     where: { name: "Subscriptions" },
     update: {},
@@ -103,7 +105,7 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient().$extends(softDeleteExtension);
   seedPlans(prisma)
     .catch((error) => {
       console.error(error);

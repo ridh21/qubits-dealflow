@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
+# dependencies (any depth)
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -54,3 +54,12 @@ next-env.d.ts
 # Browser test artifacts
 /playwright-report/
 /test-results/
+
+# Container seeder / package-manager artifacts (any depth)
+.pnpm-store/
+
+# Retired code/ subdirectory from before the repo was flattened
+/code/
+
+# Agent tooling state
+.claude/

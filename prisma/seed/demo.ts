@@ -13,13 +13,13 @@
  *    anchor, so schedules, invoices and credits line up period by period
  */
 import {
-  PrismaClient,
   Prisma,
   type RecurringInterval,
   type QuotationStatus,
   type RiskBand,
 } from "@prisma/client";
 import { randomBytes, randomUUID } from "node:crypto";
+import type { DbClient } from "@/server/db";
 import { pctOf, applyDiscount } from "../../src/domain/money/money";
 import { priceQuotation } from "../../src/domain/pricing/price-quotation";
 import type { PricedLine } from "../../src/domain/pricing/types";
@@ -49,7 +49,7 @@ type FulfillmentPolicy = PolicyPayload<"FULFILLMENT">;
 
 // ─────────────────────────────────────────────────────────────── purge ──
 
-async function purgeDemoData(prisma: PrismaClient) {
+async function purgeDemoData(prisma: DbClient) {
   // Children first; every demo row carries an "sd_" id so this is exact.
   const tables = [
     prisma.creditApplication,
@@ -92,6 +92,22 @@ async function purgeDemoData(prisma: PrismaClient) {
   ] as unknown as {
     deleteMany(args: { where: { id: { startsWith: string } } }): Prisma.PrismaPromise<number>;
   }[];
+  // Rows created through a nested `create` get a cuid, not an "sd_" id, so an
+  // id-prefix sweep silently leaves them behind and the next reseed trips over
+  // their foreign keys. They are scoped by their demo parent instead; their own
+  // children (InvoiceLine, ShipmentLine, Allocation) cascade.
+  const demo = { startsWith: "sd_" };
+  await prisma.creditApplication.deleteMany({
+    where: { invoice: { order: { id: demo } } },
+  });
+  await prisma.payment.deleteMany({ where: { invoice: { order: { id: demo } } } });
+  await prisma.invoice.deleteMany({ where: { order: { id: demo } } });
+  await prisma.shipment.deleteMany({ where: { order: { id: demo } } });
+  await prisma.fulfillmentPlan.deleteMany({ where: { order: { id: demo } } });
+  await prisma.backorder.deleteMany({
+    where: { orderLine: { order: { id: demo } } },
+  });
+
   for (const table of tables) {
     await table.deleteMany({ where: { id: { startsWith: "sd_" } } });
   }
@@ -102,7 +118,7 @@ async function purgeDemoData(prisma: PrismaClient) {
 }
 
 /** Runtime numbering continues after the reserved 09xxx demo block. */
-async function bumpSequences(prisma: PrismaClient) {
+async function bumpSequences(prisma: DbClient) {
   for (const key of ["Q", "ORD", "INV", "CN", "SHP"] as const) {
     const row = await prisma.numberSequence.findUnique({ where: { key } });
     const next = Math.max(row?.next ?? 0, 9700);
@@ -316,7 +332,7 @@ function buildQuote(cat: Catalogue, spec: QuoteSpec): BuiltQuote {
   };
 }
 
-async function persistQuote(prisma: PrismaClient, cat: Catalogue, q: BuiltQuote) {
+async function persistQuote(prisma: DbClient, cat: Catalogue, q: BuiltQuote) {
   const spec = q.spec;
   const last = q.final;
   const header = last.priced;
@@ -492,7 +508,7 @@ type StepSpec = {
 };
 
 async function addApproval(
-  prisma: PrismaClient,
+  prisma: DbClient,
   cat: Catalogue,
   q: BuiltQuote,
   opts: {
@@ -574,7 +590,7 @@ interface OrderSpec {
 }
 
 async function createOrder(
-  prisma: PrismaClient,
+  prisma: DbClient,
   cat: Catalogue,
   orders: Map<string, BuiltQuote>,
   spec: OrderSpec,
@@ -917,7 +933,7 @@ function buildSchedule(
 
 // ─────────────────────────────────────────────────────────────── main ──
 
-export async function seedDemo(prisma: PrismaClient) {
+export async function seedDemo(prisma: DbClient) {
   console.log("  demo: purging previous demo rows…");
   await purgeDemoData(prisma);
   await bumpSequences(prisma);
@@ -3245,8 +3261,8 @@ export async function seedDemo(prisma: PrismaClient) {
   // ── portal magic-link tokens ───────────────────────────────────────
   await prisma.verificationToken.createMany({
     data: [
-      { identifier: "aarav.sharma@yopmail.com", token: hex64(), expires: new Date(NOW + 10 * 60_000), purpose: "PORTAL_LOGIN" },
-      { identifier: "ananya.mehta@yopmail.com", token: hex64(), expires: ago(1), purpose: "PORTAL_LOGIN" }, // expired edge
+      { identifier: "aarav.sharma@yopmail.com", token: hex64(), expires: new Date(NOW + 10 * 60_000), expiresAtUnix: BigInt(NOW + 10 * 60_000), purpose: "PORTAL_LOGIN" },
+      { identifier: "ananya.mehta@yopmail.com", token: hex64(), expires: ago(1), expiresAtUnix: BigInt(ago(1).getTime()), purpose: "PORTAL_LOGIN" }, // expired edge
     ],
   });
 

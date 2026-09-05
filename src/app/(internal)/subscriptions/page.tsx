@@ -117,7 +117,7 @@ export default async function SubscriptionsPage({
         </div>
       </form>
       <div className="overflow-hidden rounded-xl border bg-card">
-        <Table>
+        <Table containerClassName="rounded-none border-0">
           <TableHeader>
             <TableRow>
               {[
