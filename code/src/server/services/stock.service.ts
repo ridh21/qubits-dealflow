@@ -20,14 +20,21 @@ export async function lockWarehouseRows(
     const warehouse = await tx.warehouse.findUnique({ where: { id } });
     if (!warehouse) throw new NotFound("Warehouse unavailable.");
     if (requireActive && !warehouse.isActive)
-      throw new ValidationError("Warehouse is inactive. Recompute the allocation.");
+      throw new ValidationError(
+        "Warehouse is inactive. Recompute the allocation.",
+      );
   }
 }
 export async function lockStockRows(
   tx: Tx,
   pairs: { warehouseId: string; productId: string }[],
+  requireActive = true,
 ) {
-  await lockWarehouseRows(tx, pairs.map((pair) => pair.warehouseId));
+  await lockWarehouseRows(
+    tx,
+    pairs.map((pair) => pair.warehouseId),
+    requireActive,
+  );
   if (!pairs.length) return;
   const rows = await tx.stockLevel.findMany({
     where: { OR: pairs },

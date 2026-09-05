@@ -3,6 +3,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/server/db";
 import {
   proposePlan,
+  recomputePlan,
   acceptPlan,
   consolidateBackorder,
   markShipped,
@@ -11,6 +12,7 @@ import {
 } from "@/server/services/fulfillment.service";
 import {
   setWarehouseActive,
+  adjustStock,
   receiveStock,
 } from "@/server/services/admin/warehouse.service";
 import { FulfillmentPolicyZ, BillingPolicyZ } from "@/domain/policy/schemas";
@@ -334,6 +336,168 @@ suite(
             where: { warehouseId: f.warehouse.id, productId: f.product.id },
           })
         ).reserved,
+      ).toBe(1);
+    });
+    it("commits a fresh W2 suggestion after failed W1 acceptance and preserves decided history", async () => {
+      const f = await fixture();
+      const other = await prisma.warehouse.create({
+        data: {
+          name: randomUUID(),
+          code: randomUUID().toUpperCase(),
+          stockLevels: { create: { productId: f.product.id, onHand: 5 } },
+        },
+      });
+      await adjustStock(f.actor, {
+        warehouseId: f.warehouse.id,
+        productId: f.product.id,
+        delta: -5,
+        reason: "Test shrinkage",
+      });
+      await expect(
+        acceptPlan(f.actor, f.order.id, f.plan.id),
+      ).rejects.toMatchObject({
+        code: "CONFLICT",
+        meta: { code: "AVAILABILITY_CHANGED" },
+      });
+      const replacement = await prisma.fulfillmentPlan.findUniqueOrThrow({
+        where: { orderId: f.order.id },
+        include: { allocations: true },
+      });
+      expect(replacement.id).not.toBe(f.plan.id);
+      expect(replacement.allocations).toHaveLength(1);
+      expect(replacement.allocations[0]).toMatchObject({
+        warehouseId: other.id,
+        qty: 5,
+        reserved: false,
+      });
+      expect(
+        await prisma.shipment.count({ where: { orderId: f.order.id } }),
+      ).toBe(0);
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: f.plan.id, action: "FULFILLMENT.SUPERSEDED" },
+      });
+      expect(audit.before).toMatchObject({ plan: { id: f.plan.id } });
+      await expect(acceptPlan(f.actor, f.order.id, f.plan.id)).rejects.toThrow(
+        "plan changed",
+      );
+      await acceptPlan(f.actor, f.order.id, replacement.id);
+      const shipment = await prisma.shipment.findFirstOrThrow({
+        where: { orderId: f.order.id },
+      });
+      await markShipped(f.actor, shipment.id);
+      const decided = await prisma.fulfillmentPlan.findUniqueOrThrow({
+        where: { orderId: f.order.id },
+        include: { allocations: true },
+      });
+      await expect(
+        recomputePlan(f.actor, f.order.id, replacement.id),
+      ).rejects.toThrow("unreserved suggested");
+      expect(
+        await prisma.fulfillmentPlan.findUniqueOrThrow({
+          where: { orderId: f.order.id },
+          include: { allocations: true },
+        }),
+      ).toEqual(decided);
+      expect(
+        await prisma.shipment.count({ where: { orderId: f.order.id } }),
+      ).toBe(1);
+      expect(
+        await prisma.invoice.count({ where: { shipmentId: shipment.id } }),
+      ).toBe(1);
+    });
+
+    it("explicit recomputation rotates identity once under competing requests without duplicate backorders", async () => {
+      const f = await fixture(8, 5);
+      const results = await Promise.allSettled([
+        recomputePlan(f.actor, f.order.id, f.plan.id),
+        recomputePlan(f.actor, f.order.id, f.plan.id),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const current = await prisma.fulfillmentPlan.findUniqueOrThrow({
+        where: { orderId: f.order.id },
+      });
+      expect(current.id).not.toBe(f.plan.id);
+      const backorders = await prisma.backorder.findMany({
+        where: { orderLineId: f.order.lines[0].id },
+      });
+      expect(backorders).toHaveLength(1);
+      expect(backorders[0]).toMatchObject({ qty: 3, status: "OPEN" });
+      expect(
+        (
+          await prisma.stockLevel.findFirstOrThrow({
+            where: { productId: f.product.id },
+          })
+        ).reserved,
+      ).toBe(0);
+      expect(
+        await prisma.stockMovement.count({
+          where: { productId: f.product.id, type: "RESERVE" },
+        }),
+      ).toBe(0);
+    });
+    it("two orders contending for the last stock reserve once and refresh the loser", async () => {
+      const f = await fixture();
+      const tag = randomUUID();
+      const q = await prisma.quotation.create({
+        data: {
+          number: tag,
+          ownerId: f.actor.id,
+          customerId: f.order.customerId,
+        },
+      });
+      const second = await prisma.order.create({
+        data: {
+          number: tag,
+          quotationId: q.id,
+          quotationVersion: 1,
+          customerId: f.order.customerId,
+          currency: "USD",
+          lines: {
+            create: {
+              productId: f.product.id,
+              productName: f.product.name,
+              quotationLineId: tag,
+              kind: "PHYSICAL",
+              qty: 5,
+              unitPriceMinor: 100,
+              netMinor: 500,
+              taxMinor: 0,
+              taxBp: 0,
+              costPriceMinor: 50,
+            },
+          },
+        },
+      });
+      const secondPlan = await proposePlan(f.actor, second.id);
+      const results = await Promise.allSettled([
+        acceptPlan(f.actor, f.order.id, f.plan.id),
+        acceptPlan(f.actor, second.id, secondPlan.id),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const loserId = results[0].status === "rejected" ? f.order.id : second.id;
+      const loserPlanId = loserId === f.order.id ? f.plan.id : secondPlan.id;
+      const loser = await prisma.fulfillmentPlan.findUniqueOrThrow({
+        where: { orderId: loserId },
+        include: { allocations: true },
+      });
+      expect(loser.id).not.toBe(loserPlanId);
+      expect(loser.allocations).toHaveLength(0);
+      expect(
+        await prisma.backorder.findMany({
+          where: { orderLine: { orderId: loserId } },
+        }),
+      ).toMatchObject([{ qty: 5, status: "OPEN" }]);
+      expect(
+        (
+          await prisma.stockLevel.findFirstOrThrow({
+            where: { productId: f.product.id },
+          })
+        ).reserved,
+      ).toBe(5);
+      expect(
+        await prisma.stockMovement.count({
+          where: { productId: f.product.id, type: "RESERVE" },
+        }),
       ).toBe(1);
     });
   },

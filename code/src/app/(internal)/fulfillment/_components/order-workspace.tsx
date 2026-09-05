@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { getFulfillment } from "@/server/queries/fulfillment";
 import {
   proposePlanAction,
+  recomputePlanAction,
   acceptPlanAction,
   shipAction,
   completeServiceAction,
@@ -63,6 +64,7 @@ export function OrderWorkspace({
       const result = await fn();
       if (!result.ok) {
         setError(result.error.message);
+        router.refresh();
         return;
       }
       setError("");
@@ -95,7 +97,32 @@ export function OrderWorkspace({
               <Check />
               Accept & reserve stock
             </Button>
-            <Button variant="outline" onClick={() => setOverride(true)}>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                run(() =>
+                  recomputePlanAction({ orderId: o.id, planId: o.plan!.id }),
+                )
+              }
+            >
+              <Repeat />
+              Recompute allocation
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                setAllocations(
+                  o.plan!.allocations.map((a) => ({
+                    orderLineId: a.orderLineId,
+                    warehouseId: a.warehouseId,
+                    qty: a.qty,
+                  })),
+                );
+                setOverride(true);
+              }}
+            >
               <Pencil />
               Manual allocation
             </Button>

@@ -66,65 +66,124 @@ export async function previewSplit(quotationId: string) {
     policy.payload,
   );
 }
-export async function proposePlan(actor: SessionUser, orderId: string) {
-  requireOps(actor);
-  return withTx(async (tx) => {
-    await lockRow(tx, "Order", orderId);
-    const order = await tx.order.findUniqueOrThrow({
-      where: { id: orderId },
-      include: { lines: true, plan: true },
-    });
-    if (order.status !== "OPEN")
-      throw new ValidationError("Only open orders can be allocated.");
-    if (order.plan) return order.plan;
-    const policy = await getActivePolicy(tx, "FULFILLMENT"),
-      plan = planSplit(
-        order.lines.map((l) => ({
-          orderLineId: l.id,
-          productId: l.productId,
-          qty: l.qty - l.qtyShipped,
-          isPhysical: l.kind === "PHYSICAL",
-        })),
-        await warehouseStock(tx),
-        policy.payload,
+async function suggestPlanInTx(
+  tx: Tx,
+  actor: SessionUser,
+  orderId: string,
+  expectedPlanId?: string,
+) {
+  const order = await tx.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: {
+      lines: { include: { backorders: true } },
+      plan: { include: { allocations: true } },
+      shipments: { select: { id: true } },
+    },
+  });
+  if (order.status !== "OPEN")
+    throw new ValidationError("Only open orders can be allocated.");
+  if (expectedPlanId === undefined && order.plan) return order.plan;
+  if (expectedPlanId !== undefined) {
+    if (!order.plan || order.plan.id !== expectedPlanId)
+      throw new Conflict("The plan changed. Reload before recomputing.");
+    if (
+      order.plan.status !== "SUGGESTED" ||
+      order.plan.allocations.some((a) => a.reserved || a.qtyShipped > 0) ||
+      order.lines.some((l) => l.qtyShipped > 0) ||
+      order.shipments.length
+    )
+      throw new Conflict(
+        "Only an unreserved suggested plan can be recomputed.",
       );
-    const row = await tx.fulfillmentPlan.create({
-      data: {
-        orderId,
-        estimatedShipments: plan.shipments,
-        estimatedCostMinor: plan.estimatedCostMinor,
-        rationale: plan as unknown as Prisma.InputJsonValue,
-        policyVersionId: policy.id,
-        allocations: {
-          create: plan.allocations.map((a) => ({
-            orderLineId: a.orderLineId,
-            warehouseId: a.warehouseId,
-            qty: a.qty,
-          })),
-        },
+    await tx.backorder.deleteMany({
+      where: {
+        orderLine: { orderId },
+        status: { in: ["OPEN", "CONSOLIDATION_SUGGESTED"] },
       },
     });
-    for (const b of plan.backorders)
-      await tx.backorder.create({
-        data: { orderLineId: b.orderLineId, qty: b.qty },
-      });
-    await tx.order.update({
-      where: { id: orderId },
-      data: {
-        fulfillmentStatus: plan.backorders.length
-          ? "BACKORDERED"
-          : "UNALLOCATED",
+    // The order has one live plan. Superseded unreserved proposals are retained in audit below.
+    await tx.fulfillmentPlan.delete({ where: { id: order.plan.id } });
+  }
+  const policy = await getActivePolicy(tx, "FULFILLMENT"),
+    plan = planSplit(
+      order.lines.map((l) => ({
+        orderLineId: l.id,
+        productId: l.productId,
+        qty: l.qty - l.qtyShipped,
+        isPhysical: l.kind === "PHYSICAL",
+      })),
+      await warehouseStock(tx),
+      policy.payload,
+    );
+  const row = await tx.fulfillmentPlan.create({
+    data: {
+      orderId,
+      estimatedShipments: plan.shipments,
+      estimatedCostMinor: plan.estimatedCostMinor,
+      rationale: plan as unknown as Prisma.InputJsonValue,
+      policyVersionId: policy.id,
+      allocations: {
+        create: plan.allocations.map((a) => ({
+          orderLineId: a.orderLineId,
+          warehouseId: a.warehouseId,
+          qty: a.qty,
+        })),
       },
+    },
+  });
+  for (const b of plan.backorders)
+    await tx.backorder.create({
+      data: { orderLineId: b.orderLineId, qty: b.qty },
     });
+  await tx.order.update({
+    where: { id: orderId },
+    data: {
+      fulfillmentStatus: plan.backorders.length ? "BACKORDERED" : "UNALLOCATED",
+    },
+  });
+  if (order.plan)
     await writeAudit(tx, {
       actorId: actor.id,
       actorType: "USER",
       entityType: "FulfillmentPlan",
-      entityId: row.id,
-      action: "FULFILLMENT.PROPOSED",
-      after: plan as unknown as Prisma.InputJsonValue,
+      entityId: order.plan.id,
+      action: "FULFILLMENT.SUPERSEDED",
+      before: JSON.parse(
+        JSON.stringify({
+          plan: order.plan,
+          backorders: order.lines.flatMap((l) => l.backorders),
+        }),
+      ),
+      after: { replacementPlanId: row.id },
     });
-    return row;
+  await writeAudit(tx, {
+    actorId: actor.id,
+    actorType: "USER",
+    entityType: "FulfillmentPlan",
+    entityId: row.id,
+    action: "FULFILLMENT.PROPOSED",
+    after: plan as unknown as Prisma.InputJsonValue,
+  });
+  return row;
+}
+
+export async function proposePlan(actor: SessionUser, orderId: string) {
+  requireOps(actor);
+  return withTx(async (tx) => {
+    await lockRow(tx, "Order", orderId);
+    return suggestPlanInTx(tx, actor, orderId);
+  });
+}
+
+export async function recomputePlan(
+  actor: SessionUser,
+  orderId: string,
+  expectedPlanId: string,
+) {
+  requireOps(actor);
+  return withTx(async (tx) => {
+    await lockRow(tx, "Order", orderId);
+    return suggestPlanInTx(tx, actor, orderId, expectedPlanId);
   });
 }
 export async function acceptPlan(
@@ -133,7 +192,7 @@ export async function acceptPlan(
   expectedPlanId: string,
 ) {
   requireOps(actor);
-  return withTx(async (tx) => {
+  const outcome = await withTx(async (tx) => {
     await lockRow(tx, "Order", orderId);
     const plan = await tx.fulfillmentPlan.findUnique({
       where: { orderId },
@@ -150,7 +209,33 @@ export async function acceptPlan(
         warehouseId: a.warehouseId,
         productId: a.orderLine.productId,
       })),
+      false,
     );
+    const warehouses = await tx.warehouse.findMany({
+      where: {
+        id: { in: [...new Set(plan.allocations.map((a) => a.warehouseId))] },
+      },
+      include: { stockLevels: true },
+    });
+    const requested = new Map<string, number>();
+    for (const a of plan.allocations) {
+      const key = JSON.stringify([a.warehouseId, a.orderLine.productId]);
+      requested.set(key, (requested.get(key) ?? 0) + a.qty);
+    }
+    for (const a of plan.allocations) {
+      const warehouse = warehouses.find((w) => w.id === a.warehouseId);
+      if (!warehouse?.isActive)
+        return { id: plan.id, refreshReason: "Warehouse is inactive" };
+      const level = warehouse.stockLevels.find(
+        (l) => l.productId === a.orderLine.productId,
+      );
+      if (
+        !level ||
+        level.onHand - level.reserved <
+          requested.get(JSON.stringify([a.warehouseId, a.orderLine.productId]))!
+      )
+        return { id: plan.id, refreshReason: "Stock changed" };
+    }
     for (const a of plan.allocations) {
       await reserve(tx, {
         warehouseId: a.warehouseId,
@@ -211,6 +296,19 @@ export async function acceptPlan(
     });
     return { id: plan.id };
   });
+  if ("refreshReason" in outcome) {
+    // Release reservation locks first. Refresh commits before reporting the conflict,
+    // and expectedPlanId prevents overwriting another decision in between transactions.
+    const refreshed = await recomputePlan(actor, orderId, outcome.id);
+    throw new Conflict(
+      `${outcome.refreshReason}. Allocation recomputed; review it before reserving.`,
+      {
+        code: "AVAILABILITY_CHANGED",
+        planId: refreshed.id,
+      },
+    );
+  }
+  return outcome;
 }
 export async function markShipped(actor: SessionUser, shipmentId: string) {
   requireOps(actor);

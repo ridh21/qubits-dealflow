@@ -1,5 +1,6 @@
 "use server";
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { runAction } from "./run-action";
 import * as service from "@/server/services/fulfillment.service";
 const roles = ["ADMIN", "FINANCE"],
@@ -19,7 +20,15 @@ export async function acceptPlanAction(input: unknown) {
     roles,
     schema: z.object({ orderId: id, planId: id }),
     input,
-    execute: (a, d) => service.acceptPlan(a, d.orderId, d.planId),
+    execute: async (a, d) => {
+      try {
+        return await service.acceptPlan(a, d.orderId, d.planId);
+      } finally {
+        // Availability conflicts may have committed a new suggestion.
+        revalidatePath(`/fulfillment/${d.orderId}`);
+        revalidatePath("/fulfillment");
+      }
+    },
     paths,
   });
 }
@@ -100,6 +109,17 @@ export async function decideConsolidationAction(input: unknown) {
             expected,
           );
     },
+    paths,
+  });
+}
+
+export async function recomputePlanAction(input: unknown) {
+  return runAction({
+    roles,
+    schema: z.object({ orderId: id, planId: id }),
+    input,
+    execute: (actor, data) =>
+      service.recomputePlan(actor, data.orderId, data.planId),
     paths,
   });
 }
