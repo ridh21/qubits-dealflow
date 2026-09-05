@@ -4,7 +4,7 @@ import { getSubscription } from "@/server/queries/subscriptions";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBadge } from "@/components/layout/status-badge";
 import { Money } from "@/components/layout/money";
-import { periodAmount } from "@/domain/proration/prorate";
+import { periodAmount, recurringPriceBasis } from "@/domain/proration/prorate";
 import { ArrowLeft } from "@/components/icons";
 import { SubscriptionControls } from "./_components/subscription-controls";
 import { EntitlementsCard } from "./_components/entitlements-card";
@@ -79,7 +79,12 @@ export default async function SubscriptionPage({
             title: "Recurring amount · before tax",
             value: (
               <Money
-                minor={periodAmount(s.qty, s.unitPriceMinor, s.discountBp)}
+                minor={periodAmount(
+                  s.qty,
+                  s.unitPriceMinor,
+                  s.discountBp,
+                  recurringPriceBasis(s.orderLine),
+                )}
                 currency={s.order.currency}
               />
             ),

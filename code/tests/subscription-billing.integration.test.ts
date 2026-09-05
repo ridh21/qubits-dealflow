@@ -7,6 +7,8 @@ import {
   changeSubscription,
   previewCancel,
   cancelSubscription,
+  issuePeriod,
+  regenerateSchedule,
 } from "@/server/services/subscription-billing.service";
 import { runBilling } from "@/server/services/billing-job";
 import { changePause } from "@/server/services/pause-resume.service";
@@ -77,6 +79,59 @@ async function fixture() {
 describe.skipIf(!process.env.TEST_DATABASE_URL)(
   "subscription billing transactions",
   () => {
+    it("keeps accepted allocation cents in first and subsequent recurring invoices", async () => {
+      const { actor, sub } = await fixture();
+      await withTx(async (tx) => {
+        await tx.orderLine.update({
+          where: { id: sub.orderLineId },
+          data: {
+            qty: 1000,
+            unitPriceMinor: 123456,
+            netMinor: 94866993,
+            discountBp: 2316,
+            taxBp: 1800,
+            taxMinor: 17076059,
+          },
+        });
+        await tx.subscription.update({
+          where: { id: sub.id },
+          data: {
+            status: "ACTIVE",
+            qty: 1000,
+            unitPriceMinor: 123456,
+            discountBp: 2316,
+          },
+        });
+        const first = await issuePeriod(tx, sub.id, at("2030-09-01"));
+        const second = await issuePeriod(tx, sub.id, at("2030-10-01"));
+        for (const invoice of [first, second]) {
+          expect(invoice.subtotalMinor).toBe(94866993);
+          expect(invoice.taxMinor).toBe(17076059);
+        }
+        await regenerateSchedule(tx, sub.id);
+      });
+      await changeSubscription(
+        actor,
+        sub.id,
+        { newQty: 2000, idempotencyKey: randomUUID() },
+        at("2030-10-16"),
+      );
+      const next = await prisma.billingScheduleItem.findFirstOrThrow({
+        where: { subscriptionId: sub.id, status: "UPCOMING" },
+        orderBy: { periodStart: "asc" },
+      });
+      expect(next.amountMinor).toBe(189733986);
+      await cancelSubscription(
+        actor,
+        sub.id,
+        {
+          mode: "END_OF_PERIOD",
+          reason: "Fixture cleanup",
+          idempotencyKey: randomUUID(),
+        },
+        at("2030-10-16"),
+      );
+    }, 180000);
     it("activates once, prorates a change, and credits cancellation once", async () => {
       const { actor, sub } = await fixture();
       const before = await runBilling(at("2030-08-31"));
