@@ -1,6 +1,7 @@
 import { applyDiscount } from "@/domain/money/money";
 
-export type PriceRuleKind = "NO_ADJUSTMENT" | "PERCENT_OFF_BASE" | "FIXED_ITEMS";
+export type PriceRuleKind =
+  "NO_ADJUSTMENT" | "PERCENT_OFF_BASE" | "FIXED_ITEMS";
 
 export interface PricedProduct {
   id: string;
@@ -34,7 +35,9 @@ export function resolveUnitPrice(
   }
 
   if (priceList.rule === "PERCENT_OFF_BASE") {
-    return applyDiscount(product.basePriceMinor, priceList.percentOffBp) + extras;
+    return (
+      applyDiscount(product.basePriceMinor, priceList.percentOffBp) + extras
+    );
   }
 
   // NO_ADJUSTMENT still honours explicit item overrides on the list.
