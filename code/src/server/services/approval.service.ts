@@ -1,3 +1,4 @@
+import { createOrderFromQuotation } from "./order.service";
 import { Prisma } from "@prisma/client";
 import { withTx, type Tx } from "@/server/db";
 import type { SessionUser } from "@/server/auth/guards";
@@ -274,6 +275,32 @@ export async function decideStep(
           lastActivityAt: now,
         },
       });
+    }
+    if (decision === "APPROVE" && !next) {
+      const acceptance = await tx.quoteAcceptance.findUnique({
+        where: {
+          quotationId_version: { quotationId: q.id, version: q.version },
+        },
+      });
+      if (acceptance) {
+        await createOrderFromQuotation(tx, q.id, q.version, actor);
+      } else if (q.sentAt) {
+        await tx.quotation.update({
+          where: { id: q.id },
+          data: { status: "SENT", sentAt: now },
+        });
+        const recipients = await tx.user.findMany({
+          where: { customerId: q.customerId, role: "CUSTOMER", isActive: true },
+          select: { id: true },
+        });
+        for (const recipient of recipients)
+          await notifyUser(tx, recipient.id, {
+            type: "QUOTATION_READY",
+            title: `${q.number} is ready to review`,
+            body: `Version ${q.version} has been approved. Review the updated terms before accepting.`,
+            href: `/portal/quotations/${q.id}`,
+          });
+      }
     }
     await writeAudit(tx, {
       actorId: actor.id,
