@@ -103,6 +103,9 @@ async function purgeDemoData(prisma: DbClient) {
   await prisma.payment.deleteMany({ where: { invoice: { order: { id: demo } } } });
   await prisma.invoice.deleteMany({ where: { order: { id: demo } } });
   await prisma.shipment.deleteMany({ where: { order: { id: demo } } });
+  await prisma.serviceCompletion.deleteMany({
+    where: { orderLine: { order: { id: demo } } },
+  });
   await prisma.fulfillmentPlan.deleteMany({ where: { order: { id: demo } } });
   await prisma.backorder.deleteMany({
     where: { orderLine: { order: { id: demo } } },
