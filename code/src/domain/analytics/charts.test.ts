@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  daysSalesOutstanding,
   allowedViews,
   analyticsView,
   percentage,
@@ -7,6 +8,11 @@ import {
   seriesRows,
 } from "./charts";
 describe("analytics access and aggregation", () => {
+  it("calculates DSO only when sales provide a meaningful denominator", () => {
+    expect(daysSalesOutstanding(14000, 7000, 30)).toBe(60);
+    expect(daysSalesOutstanding(5000, 0, 30)).toBeNull();
+    expect(daysSalesOutstanding(-10, 7000, 30)).toBe(0);
+  });
   it("rejects forged role views instead of silently exposing another dashboard", () => {
     expect(allowedViews("SALES_REP")).toEqual(["rep"]);
     expect(allowedViews("SALES_MANAGER")).toEqual(["rep", "manager"]);

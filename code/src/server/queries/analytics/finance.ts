@@ -1,7 +1,11 @@
-import type { Prisma } from "@prisma/client";
+import { reportInvoiceWhere } from "@/server/reports/scope";
 import type { AnalyticsContext } from "./context";
 import { month } from "./context";
-import { seriesRows, type AnalyticsChart } from "@/domain/analytics/charts";
+import {
+  daysSalesOutstanding,
+  seriesRows,
+  type AnalyticsChart,
+} from "@/domain/analytics/charts";
 import { arAging, mrr } from "@/domain/reports/kpis";
 export async function financeCharts({
   db,
@@ -9,68 +13,89 @@ export async function financeCharts({
   filters,
   period,
   now,
+  actor,
 }: AnalyticsContext): Promise<AnalyticsChart[]> {
-  // Standalone invoices are visible to finance/admin unless a quotation-only dimension is selected.
-  const quoteDimension =
-    filters.teamId ||
-    filters.ownerId ||
-    filters.productId ||
-    filters.categoryId ||
-    filters.cycle ||
-    filters.approvalStatus !== "ALL";
-  const access: Prisma.InvoiceWhereInput = quoteDimension
-    ? { order: { quotation: scope } }
-    : {
-        OR: [
-          { order: { quotation: scope } },
-          {
-            orderId: null,
+  const access = reportInvoiceWhere(actor, filters);
+  const [
+    invoices,
+    payments,
+    outstanding,
+    subscriptions,
+    transitions,
+    periodEndInvoices,
+    creditInvoiceIds,
+  ] = await Promise.all([
+    db.invoice.findMany({
+      where: {
+        AND: [
+          access,
+          { status: "ISSUED", issuedAt: { gte: period.from, lt: period.to } },
+        ],
+      },
+    }),
+    db.payment.findMany({
+      where: {
+        paidAt: { gte: period.from, lt: period.to },
+        invoice: { AND: [access, { status: "ISSUED" }] },
+      },
+      include: { invoice: { select: { currency: true } } },
+    }),
+    db.invoice.findMany({
+      where: { AND: [access, { status: "ISSUED", issuedAt: { lte: now } }] },
+    }),
+    db.subscription.findMany({
+      where: { order: { quotation: scope } },
+      include: {
+        plan: { select: { interval: true } },
+        order: { select: { currency: true } },
+      },
+    }),
+    db.subscriptionTransition.findMany({
+      where: {
+        effectiveAt: { gte: period.from, lt: period.to },
+        type: { in: ["PAUSED", "CANCELLED"] },
+        subscription: { order: { quotation: scope } },
+      },
+    }),
+    db.invoice.findMany({
+      where: {
+        AND: [access, { status: "ISSUED", issuedAt: { lt: period.to } }],
+      },
+      include: {
+        payments: { where: { paidAt: { lt: period.to } } },
+        creditApplications: { where: { appliedAt: { lt: period.to } } },
+      },
+    }),
+    // Quotation dimensions require resolving the polymorphic credit source.
+    access.OR
+      ? Promise.resolve(null)
+      : db.invoice.findMany({ where: access, select: { id: true } }),
+  ]);
+  const credits = await db.creditNote.findMany({
+    where: {
+      createdAt: { gte: period.from, lt: period.to },
+      ...(creditInvoiceIds === null
+        ? {
             customerId: filters.customerId,
             customer: filters.tier ? { tier: filters.tier } : undefined,
-          },
-        ],
-      };
-  const [invoices, payments, outstanding, subscriptions, transitions] =
-    await Promise.all([
-      db.invoice.findMany({
-        where: {
-          AND: [
-            access,
-            { status: "ISSUED", issuedAt: { gte: period.from, lt: period.to } },
-          ],
-        },
-      }),
-      db.payment.findMany({
-        where: {
-          paidAt: { gte: period.from, lt: period.to },
-          invoice: { AND: [access, { status: "ISSUED" }] },
-        },
-        include: { invoice: { select: { currency: true } } },
-      }),
-      db.invoice.findMany({
-        where: { AND: [access, { status: "ISSUED", issuedAt: { lte: now } }] },
-      }),
-      db.subscription.findMany({
-        where: { order: { quotation: scope } },
-        include: {
-          plan: { select: { interval: true } },
-          order: { select: { currency: true } },
-        },
-      }),
-      db.subscriptionTransition.findMany({
-        where: {
-          effectiveAt: { gte: period.from, lt: period.to },
-          type: { in: ["PAUSED", "CANCELLED"] },
-          subscription: { order: { quotation: scope } },
-        },
-      }),
-    ]);
+          }
+        : {
+            OR: [
+              { subscription: { order: { quotation: scope } } },
+              { sourceInvoiceId: { in: creditInvoiceIds.map((i) => i.id) } },
+            ],
+          }),
+    },
+    select: { currency: true, amountMinor: true, createdAt: true },
+  });
   const currencies = [
     ...new Set([
       ...invoices.map((i) => i.currency),
       ...outstanding.map((i) => i.currency),
+      ...periodEndInvoices.map((i) => i.currency),
       ...payments.map((p) => p.invoice.currency),
       ...subscriptions.map((s) => s.order.currency),
+      ...credits.map((c) => c.currency),
     ]),
   ].sort();
   const charts: AnalyticsChart[] = [];
@@ -78,6 +103,63 @@ export async function financeCharts({
     const issued = invoices.filter((i) => i.currency === currency),
       open = outstanding.filter((i) => i.currency === currency),
       cash = payments.filter((p) => p.invoice.currency === currency);
+    charts.push({
+      id: `credits-${currency}`,
+      title: `Credits and proration charges · ${currency}`,
+      question:
+        "How much credit was issued and how much proration was invoiced each month? Credits are shown as positive amounts, separately from charges.",
+      kind: "bar",
+      dimension: "Issue month (UTC)",
+      unit: currency,
+      series: [
+        { key: "credit", label: "Credit notes" },
+        { key: "proration", label: "Proration charges" },
+      ],
+      rows: seriesRows({
+        credit: credits
+          .filter((c) => c.currency === currency)
+          .map((c) => ({
+            label: month(c.createdAt),
+            value: c.amountMinor / 100,
+          })),
+        proration: issued
+          .filter((i) => i.type === "PRORATION")
+          .map((i) => ({
+            label: month(i.issuedAt),
+            value: i.totalMinor / 100,
+          })),
+      }),
+    });
+    const endBalance = periodEndInvoices
+      .filter((i) => i.currency === currency)
+      .reduce(
+        (sum, i) =>
+          sum +
+          Math.max(
+            0,
+            i.totalMinor -
+              i.payments.reduce((n, p) => n + p.amountMinor, 0) -
+              i.creditApplications.reduce((n, c) => n + c.amountMinor, 0),
+          ),
+        0,
+      );
+    const dso = daysSalesOutstanding(
+      endBalance,
+      issued.reduce((sum, i) => sum + i.totalMinor, 0),
+      (period.to.getTime() - period.from.getTime()) / 86400000,
+    );
+    charts.push({
+      id: `dso-${currency}`,
+      title: `Days sales outstanding · ${currency}`,
+      question:
+        "Period-end receivables ÷ gross invoices issued in the period × period days. Uses dated payments/credits on currently issued invoices; no value when there are no sales.",
+      kind: "radial",
+      dimension: "DSO",
+      unit: "Days",
+      maximum: Math.max(90, dso ?? 0),
+      series: [{ key: "value", label: "DSO" }],
+      rows: dso === null ? [] : [{ label: "DSO", value: dso }],
+    });
     charts.push({
       id: `revenue-${currency}`,
       title: `Invoiced revenue · ${currency}`,

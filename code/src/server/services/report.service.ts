@@ -1,7 +1,10 @@
 import { prisma, type Tx } from "@/server/db";
 import type { SessionUser } from "@/server/auth/guards";
 import { parseReportFilters, reportPeriod } from "@/lib/zod-schemas/reports";
-import { reportQuotationWhere } from "@/server/reports/scope";
+import {
+  reportQuotationWhere,
+  reportInvoiceWhere,
+} from "@/server/reports/scope";
 import {
   avgApprovalHours,
   conversion,
@@ -18,61 +21,75 @@ export async function buildReport(
 ) {
   const filters = parseReportFilters(raw),
     period = reportPeriod(filters),
-    scope = reportQuotationWhere(actor, filters);
-  const [quotes, invoices, approvals, subscriptions, categories, alerts] =
-    await Promise.all([
-      db.quotation.findMany({
-        where: {
-          AND: [scope, { createdAt: { gte: period.from, lt: period.to } }],
-        },
-        include: {
-          customer: { select: { name: true } },
-          owner: { select: { name: true } },
-          lines: true,
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-      }),
-      db.invoice.findMany({
-        where: {
-          order: { quotation: scope },
-          status: "ISSUED",
-          issuedAt: { gte: period.from, lt: period.to },
-        },
-        include: {
-          customer: { select: { name: true } },
-          payments: { where: { paidAt: { gte: period.from, lt: period.to } } },
-        },
-        orderBy: [{ issuedAt: "desc" }, { id: "asc" }],
-      }),
-      db.approvalRequest.findMany({
-        where: {
-          quotation: scope,
-          createdAt: { gte: period.from, lt: period.to },
-        },
-        include: {
-          quotation: { select: { number: true } },
-          steps: { orderBy: { index: "asc" } },
-        },
-      }),
-      db.subscription.findMany({
-        where: {
-          order: { quotation: scope },
-          activationDate: { lt: period.to },
-        },
-        include: {
-          plan: { select: { interval: true } },
-          order: { select: { currency: true } },
-        },
-      }),
-      db.category.findMany({ select: { id: true, name: true } }),
-      db.dealHealthAlert.count({
-        where: {
-          status: { not: "RESOLVED" },
-          OR: [{ quotation: scope }, { order: { quotation: scope } }],
-          flaggedAt: { gte: period.from, lt: period.to },
-        },
-      }),
-    ]);
+    scope = reportQuotationWhere(actor, filters),
+    invoiceScope = reportInvoiceWhere(actor, filters);
+  const [
+    quotes,
+    invoices,
+    approvals,
+    subscriptions,
+    categories,
+    alerts,
+    payments,
+  ] = await Promise.all([
+    db.quotation.findMany({
+      where: {
+        AND: [scope, { createdAt: { gte: period.from, lt: period.to } }],
+      },
+      include: {
+        customer: { select: { name: true } },
+        owner: { select: { name: true } },
+        lines: true,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    }),
+    db.invoice.findMany({
+      where: {
+        ...invoiceScope,
+        status: "ISSUED",
+        issuedAt: { gte: period.from, lt: period.to },
+      },
+      include: {
+        customer: { select: { name: true } },
+      },
+      orderBy: [{ issuedAt: "desc" }, { id: "asc" }],
+    }),
+    db.approvalRequest.findMany({
+      where: {
+        quotation: scope,
+        createdAt: { gte: period.from, lt: period.to },
+      },
+      include: {
+        quotation: { select: { number: true } },
+        steps: { orderBy: { index: "asc" } },
+      },
+    }),
+    db.subscription.findMany({
+      where: {
+        order: { quotation: scope },
+        activationDate: { lt: period.to },
+      },
+      include: {
+        plan: { select: { interval: true } },
+        order: { select: { currency: true } },
+      },
+    }),
+    db.category.findMany({ select: { id: true, name: true } }),
+    db.dealHealthAlert.count({
+      where: {
+        status: { not: "RESOLVED" },
+        OR: [{ quotation: scope }, { order: { quotation: scope } }],
+        flaggedAt: { gte: period.from, lt: period.to },
+      },
+    }),
+    db.payment.findMany({
+      where: {
+        paidAt: { gte: period.from, lt: period.to },
+        invoice: { AND: [invoiceScope, { status: "ISSUED" }] },
+      },
+      select: { amountMinor: true, invoice: { select: { currency: true } } },
+    }),
+  ]);
   const steps = approvals.flatMap((request) =>
     request.steps.map((step, index) => ({
       id: step.id,
@@ -90,6 +107,7 @@ export async function buildReport(
     ...new Set([
       ...quotes.map((q) => q.currency),
       ...invoices.map((i) => i.currency),
+      ...payments.map((p) => p.invoice.currency),
       ...subscriptions.map((s) => s.order.currency),
     ]),
   ].sort();
@@ -109,10 +127,9 @@ export async function buildReport(
         currency,
         revenueMinor: ins.reduce((sum, i) => sum + i.totalMinor, 0),
         discountMinor: qs.reduce((sum, q) => sum + q.discountMinor, 0),
-        cashMinor: ins.reduce(
-          (sum, i) => sum + i.payments.reduce((n, p) => n + p.amountMinor, 0),
-          0,
-        ),
+        cashMinor: payments
+          .filter((p) => p.invoice.currency === currency)
+          .reduce((sum, p) => sum + p.amountMinor, 0),
         aging: arAging(ins, new Date()),
         normalisedMrrMinor: mrr(
           subscriptions

@@ -11,7 +11,7 @@ export async function opsCharts({
   scope,
   period,
 }: AnalyticsContext): Promise<AnalyticsChart[]> {
-  const [shipments, orders, stock] = await Promise.all([
+  const [shipments, orders, stock, backorders] = await Promise.all([
     db.shipment.findMany({
       where: {
         status: "SHIPPED",
@@ -37,9 +37,40 @@ export async function opsCharts({
     db.stockLevel.findMany({
       include: { warehouse: { select: { name: true } } },
     }),
+    db.backorder.findMany({
+      where: { orderLine: { order: { quotation: scope } } },
+      select: { id: true },
+    }),
   ]);
+  const consolidations = backorders.length
+    ? await db.auditLog.findMany({
+        where: {
+          entityType: "Backorder",
+          entityId: { in: backorders.map((b) => b.id) },
+          action: "BACKORDER.CONSOLIDATED",
+          createdAt: { gte: period.from, lt: period.to },
+        },
+        select: { createdAt: true },
+      })
+    : [];
   const dated = shipments.filter((s) => !!s.order.promisedDeliveryDate);
   return [
+    {
+      id: "consolidations",
+      title: "Backorder consolidation events",
+      question:
+        "How many backorder consolidation actions were recorded each month for matching orders?",
+      kind: "bar",
+      dimension: "Action month (UTC)",
+      unit: "Actions",
+      series: [{ key: "value", label: "Consolidations" }],
+      rows: seriesRows({
+        value: consolidations.map((c) => ({
+          label: month(c.createdAt),
+          value: 1,
+        })),
+      }),
+    },
     {
       id: "lead-time",
       title: "Dispatch lead-time percentiles",

@@ -40,3 +40,12 @@ User-authored root README, moved PRD, plans and fonts must be preserved. Do not 
 - Four aggregation/access unit tests and one isolated PostgreSQL integration test passed. Integration proves forbidden view rejection, own-record scope, currency separation and payment-date cash reporting for older invoices with a half-open period boundary.
 - Latest complete suite: 111 tests passed, 21 database tests skipped in the default run. Typecheck, lint and production build passed. Manager chart/table switch and mobile sidebar verified in-browser. Automated WCAG 2 A/AA scan: zero violations after correcting chart container roles; contrast checks remain manual.
 - Task 4 is **not yet complete**: recorded-milestone funnel, anonymised team discount benchmark, recommendation acceptance instrumentation, manager alert heatmap, historical MRR reconstruction, credit/DSO charts, consolidation events and remaining browser/data-volume checks still need work. Home dashboard work is proceeding separately.
+
+### Finance semantics and home dashboard follow-up
+
+- Added period-end gross-invoice DSO (radial gauge) and dated backorder consolidation activity. DSO uses payments and credit applications before the exclusive period end, with no value for a zero sales denominator.
+- Manual reports now share invoice access rules with analytics and count cash by payment date, including payments on older invoices. Standalone invoices are limited to finance/admin and excluded when quotation-only dimensions are selected.
+- Five analytics unit tests, report access tests and two isolated PostgreSQL report/analytics integration tests pass, including DSO and cash date boundaries. The home dashboard was committed separately (`32967d1`); a schema-qualification review fix is in progress.
+- The latest full workspace typecheck is currently blocked by concurrent edits in `prisma/seed/demo.ts`; do not interpret the earlier successful build as verification of those later seed edits.
+- Credit currency snapshot migration (`bd4e531`) passed six isolated integration tests and was applied to the configured application database after confirming it was the only pending migration and that credit sources were resolvable. The established integration schema was updated separately. No existing credit application repairs were performed.
+- Added per-currency credit/proration charts after the currency snapshot became available. Analytics/report integration now covers credit totals as well as old-invoice payments and DSO.

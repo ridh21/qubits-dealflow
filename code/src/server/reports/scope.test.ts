@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reportQuotationWhere } from "./scope";
+import { reportQuotationWhere, reportInvoiceWhere } from "./scope";
 import { parseReportFilters, reportPeriod } from "@/lib/zod-schemas/reports";
 const actor = {
   id: "rep",
@@ -16,6 +16,30 @@ const filters = parseReportFilters({
   teamId: "another-team",
 });
 describe("report access and filters", () => {
+  it("admits standalone invoices only for finance/admin without quotation dimensions", () => {
+    const basic = parseReportFilters({
+      from: "2026-09-01",
+      to: "2026-09-30",
+      customerId: "customer",
+    });
+    expect(reportInvoiceWhere(actor, basic).OR).toBeUndefined();
+    expect(
+      reportInvoiceWhere({ ...actor, role: "FINANCE" }, basic).OR,
+    ).toContainEqual({
+      orderId: null,
+      customerId: "customer",
+      customer: undefined,
+    });
+    expect(
+      reportInvoiceWhere(
+        { ...actor, role: "ADMIN" },
+        { ...basic, ownerId: actor.id },
+      ).OR,
+    ).toBeUndefined();
+    expect(() =>
+      reportInvoiceWhere({ ...actor, role: "CUSTOMER" }, basic),
+    ).toThrow();
+  });
   it("intersects rep scope with requested owner and team", () => {
     const result = reportQuotationWhere(actor, filters);
     expect(result.AND).toContainEqual({ ownerId: "rep" });

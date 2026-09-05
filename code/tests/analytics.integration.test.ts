@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { testDatabase } from "./helpers/database";
 import { buildAnalytics } from "@/server/queries/analytics";
+import { buildReport } from "@/server/services/report.service";
 describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
   it("scopes sales and counts current-period payments on older invoices without mixing currencies", async () => {
     const db = testDatabase();
@@ -69,6 +70,34 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
             sourceKey: randomUUID(),
           },
         });
+        await db.invoice.create({
+          data: {
+            number: `ANA-${randomUUID()}`,
+            customerId: customer.id,
+            orderId: order.id,
+            type: "ONE_TIME",
+            currency,
+            issuedAt: new Date("2042-09-20"),
+            dueAt: new Date("2042-10-20"),
+            subtotalMinor: 7000,
+            taxMinor: 0,
+            totalMinor: 7000,
+            sourceKey: randomUUID(),
+          },
+        });
+        await db.creditNote.create({
+          data: {
+            number: `ANA-${randomUUID()}`,
+            customerId: customer.id,
+            sourceInvoiceId: invoice.id,
+            currency,
+            amountMinor: 1000,
+            remainingMinor: 1000,
+            reason: "Analytics fixture",
+            idempotencyKey: randomUUID(),
+            createdAt: new Date("2042-09-22"),
+          },
+        });
         await db.payment.create({
           data: {
             invoiceId: invoice.id,
@@ -118,7 +147,27 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("analytics boundaries", () => {
       for (const currency of ["USD", "EUR"])
         expect(
           finance.charts.find((c) => c.id === `cash-${currency}`)?.rows,
-        ).toEqual([{ label: "2042-09", invoiced: 0, cash: 30 }]);
+        ).toEqual([{ label: "2042-09", invoiced: 70, cash: 30 }]);
+      for (const currency of ["USD", "EUR"])
+        expect(
+          finance.charts.find((c) => c.id === `dso-${currency}`)?.rows,
+        ).toEqual([{ label: "DSO", value: 60 }]);
+      const report = await buildReport(
+        { ...rep, role: "FINANCE" },
+        filters,
+        db,
+      );
+      for (const currency of ["USD", "EUR"]) {
+        expect(
+          finance.charts.find((c) => c.id === `credits-${currency}`)?.rows,
+        ).toEqual([{ label: "2042-09", credit: 10, proration: 0 }]);
+        expect(
+          report.currencies.find((c) => c.currency === currency)?.cashMinor,
+        ).toBe(3000);
+        expect(
+          report.currencies.find((c) => c.currency === currency)?.revenueMinor,
+        ).toBe(7000);
+      }
     } finally {
       await db.$disconnect();
     }

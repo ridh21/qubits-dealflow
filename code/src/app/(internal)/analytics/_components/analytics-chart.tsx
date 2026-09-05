@@ -1,6 +1,9 @@
 "use client";
 import { useId, useState } from "react";
 import {
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
   Area,
   AreaChart,
   Bar,
@@ -96,6 +99,31 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
   );
   let visual;
   switch (chart.kind) {
+    case "radial":
+      visual = (
+        <RadialBarChart
+          data={chart.rows}
+          startAngle={180}
+          endAngle={0}
+          innerRadius="60%"
+          outerRadius="90%"
+          cy="75%"
+        >
+          <PolarAngleAxis
+            type="number"
+            domain={[0, chart.maximum ?? 100]}
+            tick={false}
+          />
+          <RadialBar
+            dataKey={chart.series[0].key}
+            background
+            fill={color(0)}
+            isAnimationActive={false}
+          />
+          <ChartTooltip content={<ChartTooltipContent nameKey="label" />} />
+        </RadialBarChart>
+      );
+      break;
     case "donut":
       visual = (
         <PieChart>
@@ -319,6 +347,12 @@ export function AnalyticsChart({ chart }: { chart: Definition }) {
         >
           {visual}
         </ChartContainer>
+      )}
+      {chart.kind === "radial" && chart.rows.length > 0 && (
+        <p className="text-center text-2xl font-semibold tabular-nums">
+          {number.format(Number(chart.rows[0][chart.series[0].key]))}{" "}
+          <span className="text-sm font-normal">{chart.unit}</span>
+        </p>
       )}
       <ul
         className="flex flex-wrap gap-x-4 gap-y-1 text-xs"

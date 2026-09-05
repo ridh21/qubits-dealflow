@@ -29,12 +29,21 @@ export interface AnalyticsChart {
   id: string;
   title: string;
   question: string;
-  kind: "bar" | "horizontal" | "line" | "area" | "donut" | "combo" | "scatter";
+  kind:
+    | "bar"
+    | "horizontal"
+    | "line"
+    | "area"
+    | "donut"
+    | "combo"
+    | "scatter"
+    | "radial";
   unit: string;
   dimension: string;
   rows: { label: string; [key: string]: string | number }[];
   series: ChartSeries[];
   stacked?: boolean;
+  maximum?: number;
 }
 export function percentage(numerator: number, denominator: number) {
   return denominator > 0
@@ -69,4 +78,16 @@ export function seriesRows(
       Object.entries(totals).map(([key, sums]) => [key, sums.get(label) ?? 0]),
     ),
   }));
+}
+/** Gross invoice DSO uses the receivable balance and invoiced sales in one currency. */
+export function daysSalesOutstanding(
+  balanceMinor: number,
+  salesMinor: number,
+  periodDays: number,
+) {
+  if (salesMinor <= 0 || periodDays <= 0) return null;
+  return (
+    Math.round((Math.max(0, balanceMinor) / salesMinor) * periodDays * 100) /
+    100
+  );
 }

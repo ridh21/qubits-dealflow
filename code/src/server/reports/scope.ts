@@ -60,3 +60,30 @@ export function reportQuotationWhere(
     ],
   };
 }
+
+/** Standalone invoices have no quotation dimensions, but retain customer scope. */
+export function reportInvoiceWhere(
+  actor: SessionUser,
+  filters: ReportFilterValues,
+): Prisma.InvoiceWhereInput {
+  const quotation = reportQuotationWhere(actor, filters);
+  const quotationDimension =
+    filters.teamId ||
+    filters.ownerId ||
+    filters.productId ||
+    filters.categoryId ||
+    filters.cycle ||
+    filters.approvalStatus !== "ALL";
+  if (!["ADMIN", "FINANCE"].includes(actor.role) || quotationDimension)
+    return { order: { quotation } };
+  return {
+    OR: [
+      { order: { quotation } },
+      {
+        orderId: null,
+        customerId: filters.customerId,
+        customer: filters.tier ? { tier: filters.tier } : undefined,
+      },
+    ],
+  };
+}
