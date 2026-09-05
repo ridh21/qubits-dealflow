@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { prisma, withTx, type Tx } from "@/server/db";
+import { prisma, withTx, lockRow, type Tx } from "@/server/db";
 import { writeAudit } from "@/server/audit";
 import { emit } from "@/server/events";
 import { Conflict, NotFound, ValidationError } from "@/domain/errors";
@@ -59,17 +59,18 @@ export async function updateWarehouse(actor: SessionUser, id: string, input: WhI
 
 /** Reserved stock belongs to live orders, so it blocks deactivation. */
 export async function setWarehouseActive(actor: SessionUser, id: string, isActive: boolean) {
-  if (!isActive) {
-    const reserved = await prisma.stockLevel.aggregate({
-      where: { warehouseId: id },
-      _sum: { reserved: true },
-    });
-    if ((reserved._sum.reserved ?? 0) > 0) {
-      throw new Conflict("This warehouse still holds reserved stock for open orders.");
-    }
-  }
-
   return withTx(async (tx) => {
+    await lockRow(tx, "Warehouse", id);
+    if (!isActive) {
+      const reserved = await tx.stockLevel.aggregate({
+        where: { warehouseId: id },
+        _sum: { reserved: true },
+      });
+      if ((reserved._sum.reserved ?? 0) > 0) {
+        throw new Conflict("This warehouse still holds reserved stock for open orders.");
+      }
+    }
+
     const wh = await tx.warehouse.update({ where: { id }, data: { isActive } });
     await writeAudit(tx, {
       actorId: actor.id,

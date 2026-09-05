@@ -1,5 +1,6 @@
 "use server";
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { runAction } from "./run-action";
 import * as service from "@/server/services/fulfillment.service";
 const roles = ["ADMIN", "FINANCE"],
@@ -19,7 +20,15 @@ export async function acceptPlanAction(input: unknown) {
     roles,
     schema: z.object({ orderId: id, planId: id }),
     input,
-    execute: (a, d) => service.acceptPlan(a, d.orderId, d.planId),
+    execute: async (a, d) => {
+      try {
+        return await service.acceptPlan(a, d.orderId, d.planId);
+      } finally {
+        // Availability conflicts may have committed a new suggestion.
+        revalidatePath(`/fulfillment/${d.orderId}`);
+        revalidatePath("/fulfillment");
+      }
+    },
     paths,
   });
 }
@@ -74,6 +83,43 @@ export async function overridePlanAction(input: unknown) {
     input,
     execute: (a, d) =>
       service.overridePlan(a, d.orderId, d.allocations, d.note),
+    paths,
+  });
+}
+
+export async function decideConsolidationAction(input: unknown) {
+  return runAction({
+    roles,
+    schema: z.object({
+      backorderId: id,
+      decision: z.enum(["ACCEPT", "DECLINE"]),
+      warehouseId: id,
+      qty: z.number().int().positive(),
+    }),
+    input,
+    execute: (actor, data) => {
+      const expected = { warehouseId: data.warehouseId, qty: data.qty };
+      return data.decision === "DECLINE"
+        ? service.declineConsolidation(actor, data.backorderId, expected)
+        : service.consolidateBackorder(
+            actor,
+            data.backorderId,
+            data.warehouseId,
+            data.qty,
+            expected,
+          );
+    },
+    paths,
+  });
+}
+
+export async function recomputePlanAction(input: unknown) {
+  return runAction({
+    roles,
+    schema: z.object({ orderId: id, planId: id }),
+    input,
+    execute: (actor, data) =>
+      service.recomputePlan(actor, data.orderId, data.planId),
     paths,
   });
 }

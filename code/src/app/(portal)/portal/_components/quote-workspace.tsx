@@ -38,22 +38,31 @@ import {
 import { DatePicker } from "@/components/forms/date-picker";
 import { Check, Envelope, X } from "@/components/icons";
 import { formatMinor } from "@/domain/money/money";
-export function PortalQuoteWorkspace({ quote: q }: { quote: PortalQuote }) {
+export function PortalQuoteWorkspace({
+  quote: q,
+  withdrawableIds,
+}: {
+  quote: PortalQuote;
+  withdrawableIds: string[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<"request" | "accept" | null>(null);
   const [lineId, setLine] = useState("general");
+  const [withdrawId, setWithdrawId] = useState("");
+  const withdrawable = q.messages.filter(
+    (m) => withdrawableIds.includes(m.id) && m.status === "OPEN",
+  );
+  const toWithdraw =
+    withdrawable.find((m) => m.id === withdrawId) ?? withdrawable[0];
   const [body, setBody] = useState("");
   const [qty, setQty] = useState("");
   const [discount, setDiscount] = useState("");
   const [date, setDate] = useState<Date>();
   const expired = !!q.validUntil && new Date(q.validUntil) < new Date();
   const open = q.messages.filter(
-    (m) =>
-      m.author === "CUSTOMER" &&
-      m.status === "OPEN" &&
-      m.quotationVersion === q.version,
+    (m) => m.author === "CUSTOMER" && m.status === "OPEN",
   );
   const canAccept =
     !expired &&
@@ -118,6 +127,41 @@ export function PortalQuoteWorkspace({ quote: q }: { quote: PortalQuote }) {
           <Envelope />
           Request changes
         </Button>
+        {toWithdraw && (
+          <>
+            <label htmlFor="withdraw-request" className="text-xs font-medium">
+              Your open request
+            </label>
+            <Select value={toWithdraw.id} onValueChange={setWithdrawId}>
+              <SelectTrigger id="withdraw-request" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {withdrawable.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    v{m.quotationVersion} · {m.body.slice(0, 60)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const result = await withdrawProposalAction({
+                    messageId: toWithdraw.id,
+                  });
+                  if (!result.ok) setError(result.error.message);
+                  else router.refresh();
+                })
+              }
+            >
+              <X />
+              Withdraw selected request
+            </Button>
+          </>
+        )}
         <Button variant="outline" asChild>
           <Link href="/portal">Back to quotations</Link>
         </Button>
@@ -218,27 +262,6 @@ export function PortalQuoteWorkspace({ quote: q }: { quote: PortalQuote }) {
               {m.status.toLowerCase()}
             </p>
             <p className="whitespace-pre-wrap">{m.body}</p>
-            {m.author === "CUSTOMER" &&
-              m.status === "OPEN" &&
-              m.quotationVersion === q.version && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={pending}
-                  onClick={() =>
-                    start(async () => {
-                      const result = await withdrawProposalAction({
-                        messageId: m.id,
-                      });
-                      if (!result.ok) setError(result.error.message);
-                      else router.refresh();
-                    })
-                  }
-                >
-                  <X />
-                  Withdraw request
-                </Button>
-              )}
           </article>
         ))}
       </section>

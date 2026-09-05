@@ -84,7 +84,7 @@ export async function runBilling(now = new Date()) {
                 type: { in: ["QTY_CHANGED", "PLAN_CHANGED"] },
                 effectiveAt: { lte: boundary },
               },
-              orderBy: { createdAt: "asc" },
+              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             });
             for (const c of changes) {
               const d = c.detail as Record<string, unknown> | null;

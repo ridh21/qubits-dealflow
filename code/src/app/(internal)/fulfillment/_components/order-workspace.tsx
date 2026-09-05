@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import type { getFulfillment } from "@/server/queries/fulfillment";
 import {
   proposePlanAction,
+  recomputePlanAction,
   acceptPlanAction,
   shipAction,
   completeServiceAction,
   consolidateAction,
+  decideConsolidationAction,
   overridePlanAction,
 } from "@/server/actions/fulfillment";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
@@ -46,7 +48,6 @@ export function OrderWorkspace({
 }) {
   const [error, setError] = useState(""),
     [pending, start] = useTransition(),
-    [warehouse, setWarehouse] = useState(warehouses[0]?.id ?? ""),
     [override, setOverride] = useState(false),
     [note, setNote] = useState(""),
     [allocations, setAllocations] = useState(
@@ -63,6 +64,7 @@ export function OrderWorkspace({
       const result = await fn();
       if (!result.ok) {
         setError(result.error.message);
+        router.refresh();
         return;
       }
       setError("");
@@ -95,7 +97,32 @@ export function OrderWorkspace({
               <Check />
               Accept & reserve stock
             </Button>
-            <Button variant="outline" onClick={() => setOverride(true)}>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() =>
+                run(() =>
+                  recomputePlanAction({ orderId: o.id, planId: o.plan!.id }),
+                )
+              }
+            >
+              <Repeat />
+              Recompute allocation
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                setAllocations(
+                  o.plan!.allocations.map((a) => ({
+                    orderLineId: a.orderLineId,
+                    warehouseId: a.warehouseId,
+                    qty: a.qty,
+                  })),
+                );
+                setOverride(true);
+              }}
+            >
               <Pencil />
               Manual allocation
             </Button>
@@ -201,20 +228,6 @@ export function OrderWorkspace({
       </section>
       <section className="space-y-3">
         <h2 className="font-semibold">Backorders</h2>
-        {ops && (
-          <Select value={warehouse} onValueChange={setWarehouse}>
-            <SelectTrigger aria-label="Consolidation warehouse">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {warehouses.map((w) => (
-                <SelectItem key={w.id} value={w.id}>
-                  {w.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
         {o.lines.flatMap((l) =>
           l.backorders
             .filter((b) =>
@@ -228,23 +241,73 @@ export function OrderWorkspace({
                 <p>
                   {l.productName} · {b.qty} outstanding
                 </p>
+                {b.status === "CONSOLIDATION_SUGGESTED" &&
+                  b.suggestedWarehouseId &&
+                  b.suggestedQty && (
+                    <div className="space-y-2">
+                      <p>
+                        Suggested: {b.suggestedQty} units from{" "}
+                        {warehouses.find((w) => w.id === b.suggestedWarehouseId)
+                          ?.name ?? "unavailable warehouse"}
+                        . Nothing reserved yet.
+                      </p>
+                      {ops && (
+                        <div className="flex gap-2">
+                          <Button
+                            disabled={pending}
+                            onClick={() =>
+                              run(() =>
+                                decideConsolidationAction({
+                                  backorderId: b.id,
+                                  decision: "ACCEPT",
+                                  warehouseId: b.suggestedWarehouseId,
+                                  qty: b.suggestedQty,
+                                }),
+                              )
+                            }
+                          >
+                            <Check />
+                            Accept suggestion
+                          </Button>
+                          <Button
+                            variant="outline"
+                            disabled={pending}
+                            onClick={() =>
+                              run(() =>
+                                decideConsolidationAction({
+                                  backorderId: b.id,
+                                  decision: "DECLINE",
+                                  warehouseId: b.suggestedWarehouseId,
+                                  qty: b.suggestedQty,
+                                }),
+                              )
+                            }
+                          >
+                            Decline suggestion
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 {ops && (
-                  <Button
-                    variant="outline"
-                    disabled={pending || !warehouse}
-                    onClick={() =>
+                  <ConsolidationControls
+                    key={`${b.id}:${b.suggestedWarehouseId}:${b.suggestedQty}`}
+                    backorder={b}
+                    productId={l.productId}
+                    warehouses={warehouses}
+                    disabled={
+                      pending || !o.plan || o.plan.status === "SUGGESTED"
+                    }
+                    onReserve={(warehouseId, qty) =>
                       run(() =>
                         consolidateAction({
                           backorderId: b.id,
-                          warehouseId: warehouse,
-                          qty: b.qty,
+                          warehouseId,
+                          qty,
                         }),
                       )
                     }
-                  >
-                    <Package />
-                    Reserve remaining units
-                  </Button>
+                  />
                 )}
               </div>
             )),
@@ -321,5 +384,79 @@ export function OrderWorkspace({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+type FulfillmentData = Awaited<ReturnType<typeof getFulfillment>>;
+type OpenBackorder =
+  FulfillmentData["order"]["lines"][number]["backorders"][number];
+function ConsolidationControls({
+  backorder,
+  productId,
+  warehouses,
+  disabled,
+  onReserve,
+}: {
+  backorder: OpenBackorder;
+  productId: string;
+  warehouses: FulfillmentData["warehouses"];
+  disabled: boolean;
+  onReserve: (warehouseId: string, qty: number) => void;
+}) {
+  const [warehouseId, setWarehouseId] = useState(
+    backorder.suggestedWarehouseId ?? warehouses[0]?.id ?? "",
+  );
+  const [enteredQty, setEnteredQty] = useState<string | null>(null);
+  const warehouse = warehouses.find((w) => w.id === warehouseId);
+  const stock = warehouse?.stockLevels.find(
+    (level) => level.productId === productId,
+  );
+  const available = Math.max(0, (stock?.onHand ?? 0) - (stock?.reserved ?? 0));
+  const maxQty = Math.min(backorder.qty, available);
+  const qty = enteredQty === null ? maxQty : Number(enteredQty);
+  const valid = Number.isInteger(qty) && qty > 0 && qty <= maxQty;
+  return (
+    <div className="space-y-2">
+      <Select
+        value={warehouseId}
+        onValueChange={(id) => {
+          setWarehouseId(id);
+          setEnteredQty(null);
+        }}
+        disabled={disabled}
+      >
+        <SelectTrigger aria-label="Consolidation warehouse">
+          <SelectValue placeholder="Choose warehouse" />
+        </SelectTrigger>
+        <SelectContent>
+          {warehouses.map((w) => (
+            <SelectItem key={w.id} value={w.id}>
+              {w.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-sm text-muted-foreground">
+        {available} available · up to {maxQty} units can be reserved
+      </p>
+      <Input
+        aria-label="Consolidation quantity"
+        type="number"
+        min={1}
+        max={maxQty}
+        step={1}
+        value={enteredQty ?? maxQty}
+        disabled={disabled || maxQty === 0}
+        onChange={(event) => setEnteredQty(event.target.value)}
+      />
+      <Button
+        variant="outline"
+        disabled={disabled || !warehouse || !valid}
+        onClick={() => onReserve(warehouseId, qty)}
+      >
+        <Package />
+        Reserve {valid ? qty : "selected"} units
+      </Button>
+    </div>
   );
 }

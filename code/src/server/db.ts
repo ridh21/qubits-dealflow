@@ -30,7 +30,7 @@ export function withTx<T>(
 }
 
 /** Pessimistic row lock, used where two writers can race on one row. */
-const LOCKABLE_TABLES = new Set(["Quotation", "ApprovalRequest", "StockLevel", "Order", "FulfillmentPlan", "Shipment", "Subscription", "Invoice", "CreditNote", "Backorder"]);
+const LOCKABLE_TABLES = new Set(["Quotation", "ApprovalRequest", "StockLevel", "Order", "FulfillmentPlan", "Shipment", "Subscription", "Invoice", "CreditNote", "Backorder", "Warehouse"]);
 export async function lockRow(tx: Tx, table: string, id: string) {
   if (!LOCKABLE_TABLES.has(table)) throw new Error("Unsupported row-lock table.");
   // Prisma qualifies model queries with the datasource schema. Raw SQL must do

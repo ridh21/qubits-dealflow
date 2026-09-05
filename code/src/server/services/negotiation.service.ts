@@ -25,7 +25,7 @@ async function customerQuote(
   tx: Tx,
   actor: SessionUser,
   id: string,
-  version: number,
+  version?: number,
 ) {
   const visible = await tx.quotation.findFirst({
     where: { id, customerId: actor.customerId ?? "", sentAt: { not: null } },
@@ -50,21 +50,22 @@ async function respondInTx(
   messageId: string,
   decision: "APPLY" | "DECLINE",
   reply: string,
+  expectedVersion: number,
 ) {
-  const message = await tx.negotiationMessage.findUniqueOrThrow({
+  let message = await tx.negotiationMessage.findUniqueOrThrow({
     where: { id: messageId },
   });
-  const quote = await lockedQuote(
-    tx,
-    message.quotationId,
-    message.quotationVersion,
-  );
+  const quote = await lockedQuote(tx, message.quotationId, expectedVersion);
   assertQuoteAccess(quote, actor);
+  // Another response may have completed while this request waited for the quote lock.
+  message = await tx.negotiationMessage.findUniqueOrThrow({
+    where: { id: messageId },
+  });
   if (message.author !== "CUSTOMER" || message.status !== "OPEN")
     throw new Conflict("This proposal has already been handled.");
-  requireCurrentOffer(quote, ["SENT", "UNDER_NEGOTIATION"]);
   let revisionVersion: number | undefined;
   if (decision === "APPLY") {
+    requireCurrentOffer(quote, ["SENT", "UNDER_NEGOTIATION"]);
     await reviseInTx(tx, actor, quote, "Customer proposal applied");
     if (message.lineId) {
       const line = await tx.quotationLine.findFirst({
@@ -144,16 +145,26 @@ async function respondInTx(
         : reply,
       href: `/portal/quotations/${quote.id}`,
     });
-  return { revisionVersion };
+  await tx.quotation.update({
+    where: { id: quote.id },
+    data: { lastActivityAt: new Date() },
+  });
+  return { revisionVersion, quotationId: quote.id };
 }
 export async function respondToProposal(
   actor: SessionUser,
   messageId: string,
   decision: "APPLY" | "DECLINE",
   reply: string,
+  expectedVersion: number,
 ) {
   if (!reply.trim()) throw new ValidationError("Add a reply for the customer.");
-  return withTx((tx) => respondInTx(tx, actor, messageId, decision, reply));
+  return withTx((tx) =>
+    respondInTx(tx, actor, messageId, decision, reply, expectedVersion),
+  ).then(async (result) => {
+    await emit("quotation.activity", { quotationId: result.quotationId });
+    return result;
+  });
 }
 export async function submitProposals(
   actor: SessionUser,
@@ -313,7 +324,6 @@ export async function acceptQuotation(
       await tx.negotiationMessage.count({
         where: {
           quotationId: id,
-          quotationVersion: version,
           author: "CUSTOMER",
           status: "OPEN",
         },
@@ -342,15 +352,13 @@ export async function acceptQuotation(
 }
 export async function withdrawProposal(actor: SessionUser, messageId: string) {
   return withTx(async (tx) => {
-    const message = await tx.negotiationMessage.findUniqueOrThrow({
+    let message = await tx.negotiationMessage.findUniqueOrThrow({
       where: { id: messageId },
     });
-    await customerQuote(
-      tx,
-      actor,
-      message.quotationId,
-      message.quotationVersion,
-    );
+    await customerQuote(tx, actor, message.quotationId);
+    message = await tx.negotiationMessage.findUniqueOrThrow({
+      where: { id: messageId },
+    });
     if (message.authorUserId !== actor.id || message.status !== "OPEN")
       throw new Conflict("This proposal cannot be withdrawn.");
     await tx.negotiationMessage.update({
@@ -364,5 +372,12 @@ export async function withdrawProposal(actor: SessionUser, messageId: string) {
       entityId: messageId,
       action: "PROPOSAL.WITHDRAWN",
     });
+    await tx.quotation.update({
+      where: { id: message.quotationId },
+      data: { lastActivityAt: new Date() },
+    });
+    return message.quotationId;
+  }).then(async (quotationId) => {
+    await emit("quotation.activity", { quotationId });
   });
 }

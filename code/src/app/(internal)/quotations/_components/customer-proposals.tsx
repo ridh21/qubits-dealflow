@@ -3,6 +3,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { NegotiationMessage } from "@prisma/client";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
 import {
@@ -34,9 +41,18 @@ export function CustomerProposals({
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [reply, setReply] = useState("");
+  const [proposalId, setProposalId] = useState("");
+  const openMessages = messages.filter(
+    (m) => m.author === "CUSTOMER" && m.status === "OPEN",
+  );
+  const activeMessage =
+    openMessages.find((m) => m.id === proposalId) ?? openMessages[0];
   const [selected, setSelected] = useState<{
     id: string;
     decision: "APPLY" | "DECLINE";
+    expectedVersion: number;
+    sourceVersion: number;
+    body: string;
   } | null>(null);
   function respond() {
     if (!selected) return;
@@ -45,6 +61,7 @@ export function CustomerProposals({
         messageId: selected.id,
         decision: selected.decision,
         reply,
+        expectedVersion: selected.expectedVersion,
       });
       if (!result.ok) {
         setError(result.error.message);
@@ -75,6 +92,62 @@ export function CustomerProposals({
           >
             <Envelope />
             Send to customer
+          </Button>
+        </WorkspaceActions>
+      )}
+      {canRespond && activeMessage && (
+        <WorkspaceActions>
+          <label htmlFor="proposal-response" className="text-xs font-medium">
+            Customer request
+          </label>
+          <Select value={activeMessage.id} onValueChange={setProposalId}>
+            <SelectTrigger id="proposal-response" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {openMessages.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  v{m.quotationVersion} · {m.body.slice(0, 60)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Review the request against current version {version} before applying
+            it.
+          </p>
+          <Button
+            disabled={
+              pending || !["SENT", "UNDER_NEGOTIATION"].includes(status)
+            }
+            onClick={() =>
+              setSelected({
+                id: activeMessage.id,
+                decision: "APPLY",
+                expectedVersion: version,
+                sourceVersion: activeMessage.quotationVersion,
+                body: activeMessage.body,
+              })
+            }
+          >
+            <Check />
+            Apply request to v{version}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              setSelected({
+                id: activeMessage.id,
+                decision: "DECLINE",
+                expectedVersion: version,
+                sourceVersion: activeMessage.quotationVersion,
+                body: activeMessage.body,
+              })
+            }
+          >
+            <X />
+            Decline request
           </Button>
         </WorkspaceActions>
       )}
@@ -112,33 +185,6 @@ export function CustomerProposals({
                   {new Date(message.requestedDeliveryDate).toLocaleDateString()}
                 </p>
               )}
-              {canRespond &&
-                message.author === "CUSTOMER" &&
-                message.status === "OPEN" &&
-                message.quotationVersion === version &&
-                ["SENT", "UNDER_NEGOTIATION"].includes(status) && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        setSelected({ id: message.id, decision: "APPLY" })
-                      }
-                    >
-                      <Check />
-                      Apply proposal
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setSelected({ id: message.id, decision: "DECLINE" })
-                      }
-                    >
-                      <X />
-                      Decline
-                    </Button>
-                  </div>
-                )}
             </article>
           ))}
         </section>
@@ -158,10 +204,15 @@ export function CustomerProposals({
             </DialogTitle>
             <DialogDescription>
               {selected?.decision === "APPLY"
-                ? "This creates a new quotation version and checks its approval requirements. The customer must accept the updated terms."
+                ? `Apply this request to current version ${selected.expectedVersion}, even if it was proposed on an earlier version. This creates a new revision and rechecks approval; the customer must accept the updated terms.`
                 : "Your reply will appear in the customer portal."}
             </DialogDescription>
           </DialogHeader>
+          {selected && (
+            <p className="rounded-lg bg-muted p-3 text-sm">
+              Request from v{selected.sourceVersion}: {selected.body}
+            </p>
+          )}
           <Textarea
             aria-label="Reply to customer"
             value={reply}
