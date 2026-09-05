@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionUser } from "@/server/auth/guards";
 import type { Prisma } from "@prisma/client";
 
@@ -45,6 +45,10 @@ const request = (role: string, ownerId = "other", overrides = {}) => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv(
+    "DATABASE_URL",
+    "postgresql://test:test@localhost/test?schema=dashboard_test",
+  );
   vi.useRealTimers();
   mocks.auth.mockResolvedValue(actor("SALES_REP"));
   mocks.quotes.mockResolvedValue([]);
@@ -56,7 +60,43 @@ beforeEach(() => {
   mocks.audit.mockResolvedValue([]);
 });
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("home dashboard query", () => {
+  it.each(["public", "dashboard_test", 'test"; SELECT 1; --'])(
+    "qualifies every physical table with safely quoted schema %s",
+    async (schema) => {
+      const url = new URL("postgresql://test:test@localhost/test");
+      if (schema !== "public") url.searchParams.set("schema", schema);
+      vi.stubEnv("DATABASE_URL", url.toString());
+      await getDashboard();
+      const sql = mocks.audit.mock.calls[0][0] as Prisma.Sql;
+      const quoted = `"${schema.replaceAll('"', '""')}"`;
+      const tables = [
+        "Quotation",
+        "User",
+        "Order",
+        "Invoice",
+        "Subscription",
+        "QuotationLine",
+        "NegotiationMessage",
+        "ApprovalStep",
+        "ApprovalRequest",
+        "Payment",
+        "Shipment",
+        "FulfillmentPlan",
+        "ServiceCompletion",
+        "Backorder",
+        "OrderLine",
+        "DealHealthAlert",
+        "CreditNote",
+        "AuditLog",
+      ];
+      for (const table of tables)
+        expect(sql.text).toContain(`${quoted}."${table}"`);
+      expect(sql.text).not.toMatch(/(?:FROM|JOIN) "[A-Za-z]+"(?:\s|$)/);
+    },
+  );
   it.each(["SALES_REP", "SALES_MANAGER", "FINANCE", "ADMIN"])(
     "scopes every business query for %s",
     async (role) => {

@@ -18,6 +18,13 @@ export const OPEN_QUOTATION_STATUSES: QuotationStatus[] = [
  * Unsupported/deleted entities are omitted for non-admins. No audit payloads leave this query.
  */
 async function recentActivity(actor: SessionUser) {
+  // Prisma model queries honor the URL schema; raw SQL cannot rely on search_path.
+  // Only quoted identifiers enter Prisma.raw. Actor and filter values stay bound.
+  const schema =
+    new URL(process.env.DATABASE_URL!).searchParams.get("schema") ?? "public";
+  const identifier = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const table = (name: string) =>
+    Prisma.raw(`${identifier(schema)}.${identifier(name)}`);
   const allBusiness = actor.role === "ADMIN" || actor.role === "FINANCE";
   const quoteAccess = allBusiness
     ? Prisma.sql`TRUE`
@@ -36,33 +43,33 @@ async function recentActivity(actor: SessionUser) {
     }[]
   >(Prisma.sql`
     WITH visible_quotes AS (
-      SELECT q.id FROM "Quotation" q JOIN "User" u ON u.id = q."ownerId" WHERE ${quoteAccess}
+      SELECT q.id FROM ${table("Quotation")} q JOIN ${table("User")} u ON u.id = q."ownerId" WHERE ${quoteAccess}
     ), visible_orders AS (
-      SELECT o.id FROM "Order" o JOIN visible_quotes q ON q.id = o."quotationId"
+      SELECT o.id FROM ${table("Order")} o JOIN visible_quotes q ON q.id = o."quotationId"
     ), visible_invoices AS (
-      SELECT i.id FROM "Invoice" i WHERE ${allBusiness} OR i."orderId" IN (SELECT id FROM visible_orders)
+      SELECT i.id FROM ${table("Invoice")} i WHERE ${allBusiness} OR i."orderId" IN (SELECT id FROM visible_orders)
     ), visible_subscriptions AS (
-      SELECT s.id FROM "Subscription" s JOIN visible_orders o ON o.id = s."orderId"
+      SELECT s.id FROM ${table("Subscription")} s JOIN visible_orders o ON o.id = s."orderId"
     ), visible_entities AS (
       SELECT 'Quotation' AS type, id FROM visible_quotes
       UNION ALL SELECT 'Order', id FROM visible_orders
       UNION ALL SELECT 'Invoice', id FROM visible_invoices
       UNION ALL SELECT 'Subscription', id FROM visible_subscriptions
-      UNION ALL SELECT 'QuotationLine', l.id FROM "QuotationLine" l JOIN visible_quotes q ON q.id = l."quotationId"
-      UNION ALL SELECT 'NegotiationMessage', m.id FROM "NegotiationMessage" m JOIN visible_quotes q ON q.id = m."quotationId"
-      UNION ALL SELECT 'ApprovalStep', s.id FROM "ApprovalStep" s JOIN "ApprovalRequest" r ON r.id = s."requestId" JOIN visible_quotes q ON q.id = r."quotationId"
-      UNION ALL SELECT 'ApprovalRequest', r.id FROM "ApprovalRequest" r JOIN visible_quotes q ON q.id = r."quotationId"
-      UNION ALL SELECT 'Payment', p.id FROM "Payment" p JOIN visible_invoices i ON i.id = p."invoiceId"
-      UNION ALL SELECT 'Shipment', s.id FROM "Shipment" s JOIN visible_orders o ON o.id = s."orderId"
-      UNION ALL SELECT 'FulfillmentPlan', p.id FROM "FulfillmentPlan" p JOIN visible_orders o ON o.id = p."orderId"
-      UNION ALL SELECT 'ServiceCompletion', c.id FROM "ServiceCompletion" c JOIN visible_orders o ON o.id = c."orderId"
-      UNION ALL SELECT 'Backorder', b.id FROM "Backorder" b JOIN "OrderLine" l ON l.id = b."orderLineId" JOIN visible_orders o ON o.id = l."orderId"
-      UNION ALL SELECT 'DealHealthAlert', a.id FROM "DealHealthAlert" a WHERE a."quotationId" IN (SELECT id FROM visible_quotes) OR a."orderId" IN (SELECT id FROM visible_orders)
-      UNION ALL SELECT 'CreditNote', c.id FROM "CreditNote" c WHERE ${allBusiness} OR c."subscriptionId" IN (SELECT id FROM visible_subscriptions) OR c."sourceInvoiceId" IN (SELECT id FROM visible_invoices)
+      UNION ALL SELECT 'QuotationLine', l.id FROM ${table("QuotationLine")} l JOIN visible_quotes q ON q.id = l."quotationId"
+      UNION ALL SELECT 'NegotiationMessage', m.id FROM ${table("NegotiationMessage")} m JOIN visible_quotes q ON q.id = m."quotationId"
+      UNION ALL SELECT 'ApprovalStep', s.id FROM ${table("ApprovalStep")} s JOIN ${table("ApprovalRequest")} r ON r.id = s."requestId" JOIN visible_quotes q ON q.id = r."quotationId"
+      UNION ALL SELECT 'ApprovalRequest', r.id FROM ${table("ApprovalRequest")} r JOIN visible_quotes q ON q.id = r."quotationId"
+      UNION ALL SELECT 'Payment', p.id FROM ${table("Payment")} p JOIN visible_invoices i ON i.id = p."invoiceId"
+      UNION ALL SELECT 'Shipment', s.id FROM ${table("Shipment")} s JOIN visible_orders o ON o.id = s."orderId"
+      UNION ALL SELECT 'FulfillmentPlan', p.id FROM ${table("FulfillmentPlan")} p JOIN visible_orders o ON o.id = p."orderId"
+      UNION ALL SELECT 'ServiceCompletion', c.id FROM ${table("ServiceCompletion")} c JOIN visible_orders o ON o.id = c."orderId"
+      UNION ALL SELECT 'Backorder', b.id FROM ${table("Backorder")} b JOIN ${table("OrderLine")} l ON l.id = b."orderLineId" JOIN visible_orders o ON o.id = l."orderId"
+      UNION ALL SELECT 'DealHealthAlert', a.id FROM ${table("DealHealthAlert")} a WHERE a."quotationId" IN (SELECT id FROM visible_quotes) OR a."orderId" IN (SELECT id FROM visible_orders)
+      UNION ALL SELECT 'CreditNote', c.id FROM ${table("CreditNote")} c WHERE ${allBusiness} OR c."subscriptionId" IN (SELECT id FROM visible_subscriptions) OR c."sourceInvoiceId" IN (SELECT id FROM visible_invoices)
     )
     SELECT a.id, a."actorType", COALESCE(a."actorId" = ${actor.id}, FALSE) AS "isCurrentActor",
       a."entityType", a.action, a.version, a."createdAt"
-    FROM "AuditLog" a
+    FROM ${table("AuditLog")} a
     WHERE ${actor.role === "ADMIN"} OR EXISTS (
       SELECT 1 FROM visible_entities e WHERE e.type = a."entityType" AND e.id = a."entityId"
     )
