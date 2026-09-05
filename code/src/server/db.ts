@@ -24,15 +24,21 @@ export function withTx<T>(
   return prisma.$transaction(fn, {
     isolationLevel:
       opts?.isolationLevel ?? Prisma.TransactionIsolationLevel.ReadCommitted,
-    timeout: opts?.timeout ?? 15_000,
+    timeout: opts?.timeout ?? (process.env.TEST_DATABASE_URL ? 60_000 : 15_000),
     maxWait: 10_000,
   });
 }
 
 /** Pessimistic row lock, used where two writers can race on one row. */
+const LOCKABLE_TABLES = new Set(["Quotation", "ApprovalRequest", "StockLevel", "Order", "FulfillmentPlan", "Shipment", "Subscription", "Invoice", "CreditNote", "Backorder"]);
 export async function lockRow(tx: Tx, table: string, id: string) {
+  if (!LOCKABLE_TABLES.has(table)) throw new Error("Unsupported row-lock table.");
+  // Prisma qualifies model queries with the datasource schema. Raw SQL must do
+  // the same; search_path is not necessarily the schema in DATABASE_URL.
+  const schema = new URL(process.env.DATABASE_URL!).searchParams.get("schema") ?? "public";
+  const identifier = (value: string) => '"' + value.replaceAll('"', '""') + '"';
   await tx.$queryRawUnsafe(
-    `SELECT id FROM "${table}" WHERE id = $1 FOR UPDATE`,
+    `SELECT id FROM ${identifier(schema)}.${identifier(table)} WHERE id = $1 FOR UPDATE`,
     id,
   );
 }
