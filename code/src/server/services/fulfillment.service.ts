@@ -13,7 +13,7 @@ import {
 } from "@/domain/errors";
 import { getActivePolicy } from "./policy.service";
 import { planSplit } from "@/domain/split/plan-split";
-import { reserve, shipOut, lockStockRows } from "./stock.service";
+import { reserve, shipOut, lockStockRows, lockWarehouseRows } from "./stock.service";
 import { nextNumber } from "@/server/sequences";
 import { writeAudit } from "@/server/audit";
 function requireOps(actor: SessionUser) {
@@ -489,6 +489,7 @@ export async function consolidateBackorder(
       throw new ValidationError(
         "Accept the initial allocation before consolidating.",
       );
+    await lockWarehouseRows(tx, [warehouseId]);
     const warehouse = await tx.warehouse.findUnique({
       where: { id: warehouseId },
     });

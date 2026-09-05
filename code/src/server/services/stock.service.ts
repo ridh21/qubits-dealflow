@@ -9,10 +9,26 @@ export interface StockOperation {
   refId: string;
   actorId: string;
 }
+/** Lock hierarchy: order/backorder, sorted warehouses, then sorted stock rows. */
+export async function lockWarehouseRows(
+  tx: Tx,
+  ids: string[],
+  requireActive = true,
+) {
+  for (const id of [...new Set(ids)].sort()) {
+    await lockRow(tx, "Warehouse", id);
+    const warehouse = await tx.warehouse.findUnique({ where: { id } });
+    if (!warehouse) throw new NotFound("Warehouse unavailable.");
+    if (requireActive && !warehouse.isActive)
+      throw new ValidationError("Warehouse is inactive. Recompute the allocation.");
+  }
+}
 export async function lockStockRows(
   tx: Tx,
   pairs: { warehouseId: string; productId: string }[],
 ) {
+  await lockWarehouseRows(tx, pairs.map((pair) => pair.warehouseId));
+  if (!pairs.length) return;
   const rows = await tx.stockLevel.findMany({
     where: { OR: pairs },
     select: { id: true },
@@ -27,6 +43,7 @@ async function move(
 ) {
   if (!Number.isInteger(input.qty) || input.qty <= 0)
     throw new ValidationError("Stock quantities must be positive whole units.");
+  await lockWarehouseRows(tx, [input.warehouseId], type !== "RELEASE");
   const row = await tx.stockLevel.findUnique({
     where: {
       warehouseId_productId: {
