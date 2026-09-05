@@ -35,13 +35,15 @@ export function quotationListWhere(
         ...(p.createdFrom || p.createdTo
           ? {
               createdAt: {
+                // Date filters are interpreted on the IST wall clock (the
+                // platform's display timezone); IST is fixed at +05:30.
                 ...(p.createdFrom
-                  ? { gte: new Date(`${p.createdFrom}T00:00:00Z`) }
+                  ? { gte: new Date(`${p.createdFrom}T00:00:00+05:30`) }
                   : {}),
                 ...(p.createdTo
                   ? {
                       lt: new Date(
-                        new Date(`${p.createdTo}T00:00:00Z`).getTime() +
+                        new Date(`${p.createdTo}T00:00:00+05:30`).getTime() +
                           86400000,
                       ),
                     }

@@ -8,10 +8,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { JobActions } from "./_components/job-actions";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 
 export const metadata = { title: "Operational jobs · Admin" };
 const labels = { SUCCEEDED: "Succeeded", PARTIAL_FAILURE: "Completed with failures", FAILED: "Failed", UNFINISHED: "No outcome recorded" };
-const date = (value: string) => `${new Date(value).toISOString().replace("T", " ").slice(0, 19)} UTC`;
+const date = (value: string) => formatDateTimeIST(value);
 export default async function JobsPage({ searchParams }: { searchParams: Promise<{ page?: string; run?: string }> }) {
   await requireAdmin();
   const params = await searchParams;
@@ -23,7 +24,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     catch (error) { if (error instanceof NotFound) notFound(); throw error; }
   }
   return <>
-    <PageHeader title="Operational jobs" description="Billing run history, recorded outcomes and retries. Times are shown in UTC." />
+    <PageHeader title="Operational jobs" description="Billing run history, recorded outcomes and retries. Times are shown in IST." />
     <JobActions runId={selected?.runId} canRetry={selected?.canRetry ?? false} page={history.page} hasNext={history.hasNext} />
     <section aria-label="Billing run history" className="rounded-xl border">
       <Table containerClassName="rounded-none border-0">

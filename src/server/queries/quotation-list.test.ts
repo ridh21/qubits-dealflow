@@ -93,7 +93,7 @@ describe("quotation list query and authorization", () => {
     ])
       expect(mock).not.toHaveBeenCalled();
   });
-  it("maps all narrowing filters and includes the complete final UTC day", () => {
+  it("maps all narrowing filters and includes the complete final IST day", () => {
     const where = quotationListWhere(
       { ownerId: "self" },
       parse({
@@ -116,8 +116,8 @@ describe("quotation list query and authorization", () => {
           riskBand: "HIGH",
           totalMinor: { gte: 0, lte: 10015 },
           createdAt: {
-            gte: new Date("2026-09-01T00:00:00Z"),
-            lt: new Date("2026-09-06T00:00:00Z"),
+            gte: new Date("2026-08-31T18:30:00Z"),
+            lt: new Date("2026-09-05T18:30:00Z"),
           },
           messages: { some: { author: "CUSTOMER", status: "OPEN" } },
         },

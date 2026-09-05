@@ -11,8 +11,8 @@ export async function reportWorkbook(data: ReportData) {
     { header: "Value", key: "value", width: 30 },
   ];
   summary.addRows([
-    { metric: "From (UTC)", value: data.filters.from },
-    { metric: "Through (UTC)", value: data.filters.to },
+    { metric: "From (IST)", value: data.filters.from },
+    { metric: "Through (IST)", value: data.filters.to },
     { metric: "Quotations", value: data.summary.total },
     { metric: "Confirmed quotations", value: data.summary.confirmed },
     { metric: "Conversion rate", value: data.summary.rate },

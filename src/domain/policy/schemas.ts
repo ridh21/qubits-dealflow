@@ -1,7 +1,13 @@
 import { z } from "zod";
 
-export const BpZ = z.number().int().min(0).max(10000);
-const positive = z.number().int().min(1).max(10000);
+export const BpZ = z
+  .number().int("Enter a whole percentage.")
+  .min(0, "Percentage cannot be negative.")
+  .max(10000, "Percentage cannot exceed 100%.");
+const positive = z
+  .number().int("Enter a whole percentage.")
+  .min(1, "Percentage must be at least 0.01%.")
+  .max(10000, "Percentage cannot exceed 100%.");
 export const ApprovalRoleZ = z.enum(["SALES_MANAGER", "FINANCE"]);
 export const PolicyKindZ = z.enum([
   "DISCOUNT_RISK",

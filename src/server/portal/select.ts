@@ -116,6 +116,9 @@ export const PORTAL_ORDER_SELECT = {
     },
   },
   invoices: {
+    // Draft invoices are internal-only; the detail route 404s on them, so the
+    // order page must not render links to them.
+    where: { status: { not: "DRAFT" } },
     select: { id: true, number: true, totalMinor: true, currency: true },
   },
 } satisfies Prisma.OrderSelect;

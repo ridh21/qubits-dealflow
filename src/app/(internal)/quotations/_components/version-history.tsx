@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 import type { QuotationVersion } from "@prisma/client";
 import { quotationSnapshotDiff } from "./quotation-snapshot-diff";
 import {
@@ -99,11 +100,7 @@ export function VersionHistory({
                 <p className="text-sm text-muted-foreground">
                   By {author} ·{" "}
                   <time dateTime={new Date(selected.createdAt).toISOString()}>
-                    {new Date(selected.createdAt)
-                      .toISOString()
-                      .slice(0, 16)
-                      .replace("T", " ")}{" "}
-                    UTC
+                    {formatDateTimeIST(new Date(selected.createdAt))}
                   </time>
                 </p>
                 <p className="text-sm">

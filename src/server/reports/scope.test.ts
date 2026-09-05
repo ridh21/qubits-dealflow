@@ -65,7 +65,8 @@ describe("report access and filters", () => {
     expect(() =>
       parseReportFilters({ from: "2026-10-01", to: "2026-09-01" }),
     ).toThrow();
-    expect(reportPeriod(filters).to).toEqual(new Date("2026-10-01T00:00:00Z"));
+    // Exclusive end is the next IST midnight; IST is fixed at +05:30.
+    expect(reportPeriod(filters).to).toEqual(new Date("2026-09-30T18:30:00Z"));
     expect(
       parseReportFilters({ from: "2026-09-01", to: "2026-09-30", cycle: "" })
         .cycle,

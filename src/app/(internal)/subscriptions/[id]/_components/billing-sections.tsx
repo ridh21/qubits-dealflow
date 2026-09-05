@@ -27,7 +27,7 @@ export function Schedule({
         <Table containerClassName="rounded-none border-0">
           <TableHeader>
             <TableRow>
-              {["Period (UTC)", "Amount", "Status", "Invoice"].map((h) => (
+              {["Period (IST)", "Amount", "Status", "Invoice"].map((h) => (
                 <TableHead key={h}>{h}</TableHead>
               ))}
             </TableRow>

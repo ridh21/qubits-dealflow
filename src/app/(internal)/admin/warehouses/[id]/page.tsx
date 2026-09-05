@@ -16,6 +16,9 @@ import { Warehouse as WarehouseIcon, Cube } from "@/components/icons";
 import { WarehouseFormDialog } from "../_components/warehouse-form-dialog";
 import { StockDialogs } from "../_components/stock-dialogs";
 import { ReplenishmentTable } from "../_components/replenishment-table";
+import { ReorderPointCell } from "../_components/reorder-point-cell";
+import { WarehouseActiveToggle } from "../_components/warehouse-active-toggle";
+import { formatDateTimeIST, formatDateIST } from "@/lib/datetime-ist";
 
 export const metadata = { title: "Warehouse · Admin" };
 
@@ -82,13 +85,26 @@ export default async function WarehouseDetail({
         </span>
       ),
     },
-    { key: "reorderPoint", header: "Reorder point", align: "right", cell: (r) => <span className="tabular">{r.reorderPoint}</span> },
+    {
+      key: "reorderPoint",
+      header: "Reorder point",
+      align: "right",
+      cell: (r) => (
+        <ReorderPointCell
+          warehouseId={id}
+          productId={r.productId}
+          productName={r.product.name}
+          reorderPoint={r.reorderPoint}
+          canManage={canManage}
+        />
+      ),
+    },
     {
       key: "nextEta",
       header: "Next ETA",
       cell: (r) => (
         <span className="text-muted-foreground tabular text-xs">
-          {r.nextEta ? r.nextEta.toLocaleDateString() : "—"}
+          {r.nextEta ? formatDateIST(r.nextEta) : "—"}
         </span>
       ),
     },
@@ -98,7 +114,7 @@ export default async function WarehouseDetail({
     {
       key: "createdAt",
       header: "When",
-      cell: (r) => <span className="text-muted-foreground tabular text-xs">{r.createdAt.toLocaleString()}</span>,
+      cell: (r) => <span className="text-muted-foreground tabular text-xs">{formatDateTimeIST(r.createdAt)}</span>,
     },
     { key: "productName", header: "Product", cell: (r) => r.productName },
     { key: "type", header: "Type", cell: (r) => <StatusBadge value={r.type} /> },
@@ -134,6 +150,9 @@ export default async function WarehouseDetail({
                   priority: String(warehouse.priority),
                 }}
               />
+            ) : null}
+            {user.role === "ADMIN" ? (
+              <WarehouseActiveToggle id={warehouse.id} isActive={warehouse.isActive} />
             ) : null}
           </div>
         }

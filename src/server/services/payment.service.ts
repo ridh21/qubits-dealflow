@@ -7,7 +7,11 @@ import { Conflict, Forbidden, ValidationError } from "@/domain/errors";
 import { completeOrderIfDone } from "./order.service";
 export const PaymentInput = z.object({
   invoiceId: z.string().min(1),
-  amountMinor: z.number().int().positive().max(2147483647),
+  amountMinor: z
+    .number()
+    .int("Payment must be a whole amount.")
+    .positive("Payment must be more than zero.")
+    .max(2147483647, "Payment is too large."),
   method: z.enum(["BANK_TRANSFER", "CARD", "CASH", "OTHER"]),
   reference: z.string().max(200).optional(),
   idempotencyKey: z.string().min(8).max(200),

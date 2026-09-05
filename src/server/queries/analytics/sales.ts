@@ -136,7 +136,7 @@ export async function salesCharts(
     title: "Conversion by creation month",
     question: "What share of each creation cohort is confirmed today?",
     kind: "line",
-    dimension: "Creation month (UTC)",
+    dimension: "Creation month (IST)",
     unit: "% confirmed",
     series: [{ key: "value", label: "Conversion" }],
     rows: months.map((label) => {
@@ -256,7 +256,7 @@ export async function salesCharts(
       question:
         "When were alerts flagged? Darker cells mean more alerts; rows show weeks with activity, and blank cells mean zero. Includes alerts resolved since then.",
       kind: "heatmap",
-      dimension: "Date (UTC)",
+      dimension: "Date (IST)",
       unit: "Alerts",
       series: [{ key: "value", label: "Alerts" }],
       rows: alertHeatmap(flagged.map((a) => a.flaggedAt)),
@@ -313,7 +313,7 @@ export async function salesCharts(
       question:
         "How long did completed steps take after becoming eligible? Only requests created in the selected period are included.",
       kind: "line",
-      dimension: "Decision month (UTC)",
+      dimension: "Decision month (IST)",
       unit: "Hours",
       series: [{ key: "value", label: "Average hours" }],
       rows: [...new Set(completed.map((s) => s.label))].sort().map((label) => {

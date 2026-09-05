@@ -81,11 +81,11 @@ export const ProductInput = z.object({
   categoryId: z.string().min(1, "Pick a category."),
   type: ProductTypeEnum.default("PHYSICAL"),
   unit: z.string().min(1).default("Each"),
-  basePriceMinor: z.coerce.number().int().min(0),
-  costPriceMinor: z.coerce.number().int().min(0),
-  taxBp: z.coerce.number().int().min(0).max(10000).default(0),
+  basePriceMinor: z.coerce.number().int().min(0, "Price cannot be negative."),
+  costPriceMinor: z.coerce.number().int().min(0, "Cost cannot be negative."),
+  taxBp: z.coerce.number().int().min(0, "Tax cannot be negative.").max(10000, "Tax cannot exceed 100%.").default(0),
   isPromoted: z.coerce.boolean().default(false),
-  minMarginBp: z.coerce.number().int().min(0).max(10000).default(0),
+  minMarginBp: z.coerce.number().int().min(0, "Margin floor cannot be negative.").max(10000, "Margin floor cannot exceed 100%.").default(0),
 });
 
 export const VariantAttributeInput = z.object({
@@ -117,15 +117,15 @@ export const PriceListInput = z.object({
 export const PriceListItemInput = z.object({
   priceListId: z.string().min(1),
   productId: z.string().min(1),
-  priceMinor: z.coerce.number().int().min(0),
+  priceMinor: z.coerce.number().int().min(0, "Enter a price of zero or more."),
 });
 
 export const WarehouseInput = z.object({
   name: z.string().min(2, "Name the warehouse."),
   code: z.string().min(2, "Enter a short code.").regex(/^[A-Z0-9-]+$/, "Uppercase letters, numbers and - only."),
-  shippingCostWeightMinor: z.coerce.number().int().min(0).default(0),
-  fixedShipmentCostMinor: z.coerce.number().int().min(0).default(0),
-  priority: z.coerce.number().int().min(0).default(0),
+  shippingCostWeightMinor: z.coerce.number().int().min(0, "Cost cannot be negative.").default(0),
+  fixedShipmentCostMinor: z.coerce.number().int().min(0, "Cost cannot be negative.").default(0),
+  priority: z.coerce.number().int().min(0, "Priority cannot be negative.").default(0),
 });
 
 export const ReceiveStockInput = z.object({
@@ -146,12 +146,12 @@ export const AdjustStockInput = z.object({
 export const ReorderPointInput = z.object({
   warehouseId: z.string().min(1),
   productId: z.string().min(1),
-  reorderPoint: z.coerce.number().int().min(0),
+  reorderPoint: z.coerce.number().int().min(0, "Reorder point cannot be negative."),
 });
 
 export const ReplenishmentInput = z.object({
   warehouseId: z.string().min(1),
   productId: z.string().min(1),
   qty: z.coerce.number().int().positive("Plan at least one unit."),
-  eta: z.coerce.date(),
+  eta: z.coerce.date({ message: "Enter a valid ETA date." }),
 });

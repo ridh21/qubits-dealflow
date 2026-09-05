@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { formatDateTimeIST, formatDateIST } from "@/lib/datetime-ist";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -47,7 +48,7 @@ export function AnalyticsWorkspace({
     <>
       <PageHeader
         title="Analytics"
-        description={`${labels[data.view]} · ${data.filters.from} to ${data.filters.to} (UTC). Live operational views; manual reports and exports are available separately.`}
+        description={`${labels[data.view]} · ${data.filters.from} to ${data.filters.to} (IST). Live operational views; manual reports and exports are available separately.`}
       />
       <WorkspaceActions>
         <Button
@@ -156,7 +157,7 @@ export function AnalyticsWorkspace({
                     {q.number}
                   </Link>
                   <span className="text-muted-foreground">
-                    Last activity {q.lastActivityAt.slice(0, 10)} UTC
+                    Last activity {formatDateIST(q.lastActivityAt)}
                   </span>
                 </li>
               ))}
@@ -172,7 +173,7 @@ export function AnalyticsWorkspace({
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        Updated {data.generatedAt.replace("T", " ").slice(0, 19)} UTC. Monetary
+        Updated {formatDateTimeIST(data.generatedAt)}. Monetary
         charts use separate currencies.
       </p>
     </>

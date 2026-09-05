@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/page-header";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 import { DataTable, type Column } from "@/components/data-table/data-table";
 import { FiltersBar } from "@/components/filters/filters-bar";
 import { SearchInput } from "@/components/filters/search-input";
@@ -24,7 +25,7 @@ export default async function EmailsPage({ searchParams }: PageProps<"/admin/ema
       key: "createdAt",
       header: "Queued",
       cell: (r) => (
-        <span className="text-muted-foreground tabular text-xs">{r.createdAt.toLocaleString()}</span>
+        <span className="text-muted-foreground tabular text-xs">{formatDateTimeIST(r.createdAt)}</span>
       ),
     },
     {

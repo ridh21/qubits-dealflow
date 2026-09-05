@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { requireInternal } from "@/server/auth/guards";
 import { getPolicyOverview } from "@/server/queries/policy";
+import { formatDateTimeIST } from "@/lib/datetime-ist";
 import {
   POLICY_META,
   PolicyKindZ,
@@ -79,11 +80,7 @@ export default async function PolicyCenterPage() {
                     <p className="text-xs text-muted-foreground">
                       Published by {row.publishedByName} ·{" "}
                       <time dateTime={row.publishedAt.toISOString()}>
-                        {row.publishedAt
-                          .toISOString()
-                          .slice(0, 16)
-                          .replace("T", " ")}{" "}
-                        UTC
+                        {formatDateTimeIST(row.publishedAt)}
                       </time>
                     </p>
                   )}

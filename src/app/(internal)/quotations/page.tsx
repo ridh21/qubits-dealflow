@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateIST } from "@/lib/datetime-ist";
 import { listQuotations } from "@/server/queries/quotations";
 import type { SearchParamsRecord } from "@/server/list";
 import { quotationListHref } from "@/domain/quotation/list-params";
@@ -127,15 +128,15 @@ export default async function QuotationsPage({
               },
               {
                 key: "createdAt",
-                header: "Created (UTC)",
+                header: "Created (IST)",
                 sortable: true,
-                cell: (q) => q.createdAt.toISOString().slice(0, 10),
+                cell: (q) => formatDateIST(q.createdAt),
               },
               {
                 key: "updatedAt",
-                header: "Updated (UTC)",
+                header: "Updated (IST)",
                 sortable: true,
-                cell: (q) => q.updatedAt.toISOString().slice(0, 10),
+                cell: (q) => formatDateIST(q.updatedAt),
               },
             ]}
           />

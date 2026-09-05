@@ -17,6 +17,7 @@ import { PageHeader, Section } from "@/components/layout/page-header";
 import { KpiTile } from "@/components/layout/kpi-tile";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
 import { Money } from "@/components/layout/money";
+import { formatDateTimeIST, formatDateIST } from "@/lib/datetime-ist";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -211,7 +212,7 @@ export default async function DashboardPage() {
           {data.revenue !== null && (
             <Section
               title="Revenue this month"
-              description={`Gross invoiced revenue, ${data.monthStart.toISOString().slice(0, 10)} to today (UTC). Includes tax; excludes draft and void invoices. Credits are not deducted.`}
+              description={`Gross invoiced revenue, ${formatDateIST(data.monthStart)} to today (IST). Includes tax; excludes draft and void invoices. Credits are not deducted.`}
             >
               {data.revenue.length ? (
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -290,7 +291,7 @@ export default async function DashboardPage() {
 
         <Section
           title="Recent activity"
-          description="Latest 12 events in your scope. Times shown in UTC."
+          description="Latest 12 events in your scope. Times shown in IST."
         >
           {data.activity.length ? (
             <ol className="divide-y rounded-xl border px-4">
@@ -306,11 +307,7 @@ export default async function DashboardPage() {
                       className="text-muted-foreground text-xs"
                       dateTime={item.createdAt.toISOString()}
                     >
-                      {item.createdAt
-                        .toISOString()
-                        .slice(0, 16)
-                        .replace("T", " ")}{" "}
-                      UTC
+                      {formatDateTimeIST(item.createdAt)}
                     </time>
                   </div>
                 </li>
