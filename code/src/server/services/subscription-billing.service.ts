@@ -352,41 +352,51 @@ export async function changeSubscription(
         });
         if (source) await applyAvailableCredits(tx, source.id);
       }
-      if (p.chargeMinor)
-        await issueInvoice(tx, {
-          customerId: s.customerId,
-          orderId: s.orderId,
-          type: "PRORATION",
-          currency: s.order.currency,
-          sourceKey: `PRORATION:${input.idempotencyKey}`,
-          issuedAt: now,
-          lines: [
-            {
-              description: "Subscription change",
-              qty: 1,
-              unitPriceMinor: p.chargeMinor,
-              amountMinor: p.chargeMinor,
-              taxMinor: p.chargeTaxMinor,
-              subscriptionId: id,
-              periodStart: now,
-              periodEnd: p.differentCycle
-                ? periodEnd(plan.interval, now)
-                : s.currentPeriodEnd!,
-            },
-          ],
-        });
+      // A cycle switch starts a paid period now, including its allowance snapshot.
+      // Reuse the proration invoice rather than issuing a second SUB charge.
+      const newPeriod = p.differentCycle
+        ? {
+            periodStart: now,
+            periodEnd: periodEnd(plan.interval, now),
+            entitlements: await currentEntitlements(tx, plan),
+          }
+        : null;
+      const invoice =
+        p.chargeMinor || newPeriod
+          ? await issueInvoice(tx, {
+              customerId: s.customerId,
+              orderId: s.orderId,
+              type: "PRORATION",
+              currency: s.order.currency,
+              sourceKey: `PRORATION:${input.idempotencyKey}`,
+              issuedAt: now,
+              lines: [
+                {
+                  description: "Subscription change",
+                  qty: 1,
+                  unitPriceMinor: p.chargeMinor,
+                  amountMinor: p.chargeMinor,
+                  taxMinor: p.chargeTaxMinor,
+                  subscriptionId: id,
+                  periodStart: now,
+                  periodEnd: newPeriod?.periodEnd ?? s.currentPeriodEnd!,
+                },
+              ],
+            })
+          : null;
       await tx.subscription.update({
         where: { id },
         data: {
           qty: p.newQty,
           planId: p.newPlanId,
           unitPriceMinor: p.newPriceMinor,
-          ...(p.differentCycle
+          ...(newPeriod
             ? {
                 billingAnchor: now,
-                currentPeriodStart: now,
-                currentPeriodEnd: periodEnd(plan.interval, now),
-                nextBillingDate: periodEnd(plan.interval, now),
+                currentPeriodStart: newPeriod.periodStart,
+                currentPeriodEnd: newPeriod.periodEnd,
+                nextBillingDate: newPeriod.periodEnd,
+                entitlementsSnapshot: newPeriod.entitlements,
                 pauseEffectiveAt: null,
                 resumeAt: null,
                 status: "ACTIVE",
@@ -394,6 +404,21 @@ export async function changeSubscription(
             : {}),
         },
       });
+      if (newPeriod && invoice) {
+        const current = {
+          ...newPeriod,
+          amountMinor: p.chargeMinor,
+          status: "INVOICED" as const,
+          invoiceId: invoice.id,
+        };
+        await tx.billingScheduleItem.upsert({
+          where: {
+            subscriptionId_periodStart: { subscriptionId: id, periodStart: now },
+          },
+          create: { subscriptionId: id, ...current },
+          update: current,
+        });
+      }
     }
     await regenerateSchedule(tx, id);
     await writeAudit(tx, {
