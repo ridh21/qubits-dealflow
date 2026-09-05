@@ -153,7 +153,7 @@ export async function buildReport(
     quotations: quotes.map((q) => ({
       id: q.id,
       number: q.number,
-      customer: q.customer.name,
+      customer: q.customer?.name ?? "— unassigned —",
       owner: q.owner.name,
       status: q.status,
       currency: q.currency,

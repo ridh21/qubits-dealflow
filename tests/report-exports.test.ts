@@ -27,7 +27,7 @@ describe("report exports", () => {
   });
   it("renders multipage report and invoice PDFs", async () => {
     const report = await reportPdf(reportFixture);
-    const invoice = await invoicePdf({
+    const base = {
       number: "INV-1001",
       currency: "USD",
       customer: {
@@ -39,7 +39,6 @@ describe("report exports", () => {
       totalMinor: 1234567,
       paidMinor: 120000,
       creditAppliedMinor: 10000,
-      status: "ISSUED",
       lines: [
         {
           id: "l",
@@ -49,13 +48,21 @@ describe("report exports", () => {
           taxMinor: 112233,
         },
       ],
-    });
-    for (const bytes of [report, invoice])
+    };
+    // One render per settlement state: the balance bar, credit/paid rows and
+    // status pill all branch on these.
+    const invoices = await Promise.all([
+      invoicePdf({ ...base, status: "ISSUED" }),
+      invoicePdf({ ...base, status: "PAID", paidMinor: 1234567, creditAppliedMinor: 0 }),
+      invoicePdf({ ...base, status: "VOID" }),
+    ]);
+    for (const bytes of [report, ...invoices])
       expect(Buffer.from(bytes).subarray(0, 5).toString()).toBe("%PDF-");
     if (process.env.RENDER_EXPORT_FIXTURES) {
       await mkdir("/tmp/dealflow-exports", { recursive: true });
       await writeFile("/tmp/dealflow-exports/report.pdf", report);
-      await writeFile("/tmp/dealflow-exports/invoice.pdf", invoice);
+      for (const [index, bytes] of invoices.entries())
+        await writeFile(`/tmp/dealflow-exports/invoice-${index}.pdf`, bytes);
     }
   });
 });

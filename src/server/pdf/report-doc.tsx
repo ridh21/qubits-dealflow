@@ -9,24 +9,25 @@ import {
 import type { ReportData } from "@/server/queries/reports";
 import { reportSections } from "@/server/reports/sections";
 import { formatMinor } from "@/domain/money/money";
+import { brand } from "./brand";
 const styles = StyleSheet.create({
   page: {
     padding: 36,
     paddingBottom: 52,
     fontSize: 9,
-    fontFamily: "Helvetica",
-    color: "#292524",
+    fontFamily: "Noto Sans",
+    color: brand.fg,
   },
-  title: { fontSize: 23, marginBottom: 8, color: "#9a3412" },
-  subtitle: { fontSize: 10, color: "#57534e", marginBottom: 18 },
+  title: { fontSize: 23, marginBottom: 8, color: brand.primary },
+  subtitle: { fontSize: 10, color: brand.mutedFg, marginBottom: 18 },
   section: { fontSize: 14, marginTop: 18, marginBottom: 10 },
   row: {
     flexDirection: "row",
     borderBottomWidth: 0.5,
-    borderBottomColor: "#e7e5e4",
+    borderBottomColor: brand.border,
     paddingVertical: 7,
   },
-  head: { backgroundColor: "#fff7ed", fontFamily: "Helvetica-Bold" },
+  head: { backgroundColor: brand.primary50, fontWeight: 700 },
   cell: { flex: 1, paddingHorizontal: 5, fontSize: 8 },
   footer: {
     position: "absolute",
@@ -34,7 +35,7 @@ const styles = StyleSheet.create({
     left: 36,
     right: 36,
     fontSize: 8,
-    color: "#78716c",
+    color: brand.mutedFg,
   },
   metric: { marginBottom: 6 },
 });

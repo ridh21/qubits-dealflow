@@ -49,7 +49,7 @@ export function QuotationListBoard({ rows }: { rows: Row[] }) {
                     <p className="font-medium">
                       {q.number} · v{q.version}
                     </p>
-                    <p className="text-sm">{q.customer.name}</p>
+                    <p className="text-sm">{q.customer?.name ?? "No customer"}</p>
                     <p className="text-xs text-muted-foreground">
                       {q.owner.name} · {q.riskBand.toLowerCase()} risk
                     </p>

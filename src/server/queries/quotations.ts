@@ -93,7 +93,32 @@ export async function getQuotation(id: string) {
     },
   });
   if (!quote) throw new NotFound("Quotation unavailable in your scope.");
-  return { quote, actor };
+
+  // Version history shows which customer each snapshot had. Resolve only the
+  // ids those snapshots actually reference, rather than shipping every
+  // customer to the page.
+  const referenced = [
+    ...new Set(
+      quote.versions
+        .map(
+          (v) =>
+            (v.snapshot as { customerId?: string | null } | null)?.customerId,
+        )
+        .filter((id): id is string => typeof id === "string"),
+    ),
+  ];
+  const customerNames = Object.fromEntries(
+    referenced.length
+      ? (
+          await prisma.customer.findMany({
+            where: { id: { in: referenced } },
+            select: { id: true, name: true },
+          })
+        ).map((c) => [c.id, c.name])
+      : [],
+  );
+
+  return { quote, actor, customerNames };
 }
 export async function quotationCatalogue() {
   await requireInternal();
@@ -108,11 +133,23 @@ export async function quotationCatalogue() {
     },
   });
 }
-export async function quotationCustomers() {
+/**
+ * Customer options for the quotation picker.
+ *
+ * Bounded and search-driven: the picker asks as the user types instead of every
+ * quotation page shipping the entire customer list. An empty term returns
+ * nothing rather than the first page - opening the dropdown costs no query.
+ */
+export async function searchQuotationCustomers(query: string, take = 20) {
   await requireInternal();
+  const q = query.trim();
+  // No term, no query. This is the guard that stops an accidental caller from
+  // turning the picker back into a full customer-table read.
+  if (!q) return [];
   return prisma.customer.findMany({
-    where: { isActive: true },
+    where: { isActive: true, name: { contains: q, mode: "insensitive" } },
     select: { id: true, name: true, tier: true },
     orderBy: { name: "asc" },
+    take,
   });
 }

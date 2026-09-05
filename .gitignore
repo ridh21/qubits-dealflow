@@ -49,6 +49,7 @@ next-env.d.ts
 /docs/*
 !/docs/implementation-status.md
 !/docs/phase-03-09-audit.md
+!/docs/assistant.md
 /tests/fixtures/integration/
 
 # Browser test artifacts
@@ -58,8 +59,15 @@ next-env.d.ts
 # Container seeder / package-manager artifacts (any depth)
 .pnpm-store/
 
+# Python assistant service (services/assistant)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # Retired code/ subdirectory from before the repo was flattened
 /code/
 
 # Agent tooling state
 .claude/
+2026-09-06-041749-i-want-to-replicate-the-exact-kind-of-thing-in-th.txt

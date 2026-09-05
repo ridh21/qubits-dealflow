@@ -4,7 +4,6 @@ import { UpsellPanel } from "../_components/upsell-panel";
 import {
   getQuotation,
   quotationCatalogue,
-  quotationCustomers,
 } from "@/server/queries/quotations";
 import { PageHeader } from "@/components/layout/page-header";
 import { QuoteBuilder } from "../_components/quote-builder";
@@ -16,12 +15,11 @@ export default async function QuotationPage({
 }) {
   const { id } = await params;
   const data = await getQuotation(id);
-  const [products, suggestions, customers] = await Promise.all([
+  // The customer picker searches on demand, so no customer list is shipped
+  // with the page.
+  const [products, suggestions] = await Promise.all([
     quotationCatalogue(),
     suggestionsFor(id),
-    canEditQuotation(data.quote, data.actor)
-      ? quotationCustomers()
-      : Promise.resolve([]),
   ]);
   return (
     <>
@@ -35,7 +33,6 @@ export default async function QuotationPage({
         key={`builder:${id}:${data.quote.version}`}
         data={data}
         products={products}
-        customers={customers}
       />
       <CustomerProposals
         id={id}

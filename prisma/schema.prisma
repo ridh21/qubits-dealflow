@@ -505,8 +505,10 @@ enum RiskBand {
 model Quotation {
   id         String          @id @default(cuid())
   number     String          @unique
-  customerId String
-  customer   Customer        @relation(fields: [customerId], references: [id])
+  /// Null until the rep picks one. A draft is started before the customer is
+  /// known; submission is what requires it.
+  customerId String?
+  customer   Customer?       @relation(fields: [customerId], references: [id])
   ownerId    String
   owner      User            @relation("owner", fields: [ownerId], references: [id])
   status     QuotationStatus @default(DRAFT)

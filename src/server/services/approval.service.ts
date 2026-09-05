@@ -1,4 +1,5 @@
 import { emit } from "@/server/events";
+import { requireQuotationCustomer } from "@/domain/quotation/require-customer";
 import { createOrderFromQuotation } from "./order.service";
 import { Prisma } from "@prisma/client";
 import { withTx, type Tx } from "@/server/db";
@@ -46,8 +47,9 @@ export async function evaluateAndRoute(
     );
   if (q.validUntil && q.validUntil <= new Date())
     throw new ValidationError("Set a future validity date before submission.");
+  const customer = requireQuotationCustomer(q);
   const risk = simulateDiscountRisk(policy.payload, {
-    tier: q.customer.tier,
+    tier: customer.tier,
     orderDiscountBp: q.orderDiscountBp,
     lines: q.lines.map((l) => ({
       id: l.id,

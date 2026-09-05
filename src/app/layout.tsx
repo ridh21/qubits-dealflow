@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toast";
 import { goga, inter } from "./fonts";
 import "./globals.css";
 
@@ -17,7 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="bg-background text-foreground flex min-h-full flex-col font-sans">
         {children}
-        <Toaster position="top-right" richColors />
+        <Toaster />
       </body>
     </html>
   );

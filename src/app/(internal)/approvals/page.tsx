@@ -26,7 +26,7 @@ export default async function ApprovalsPage({
     {
       key: "customer",
       header: "Customer",
-      cell: (r) => r.quotation.customer.name,
+      cell: (r) => r.quotation.customer?.name ?? "—",
     },
     {
       key: "riskBand",

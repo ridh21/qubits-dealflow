@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { ConfirmDialog, GuardedLink } from "@/components/confirm-dialog";
 import {
   type PolicyKind,

@@ -50,6 +50,23 @@ Other useful commands:
 
 To switch back to Neon, uncomment the Neon URLs at the top of `.env`.
 
+## Assistant (optional)
+
+A read-only assistant that answers questions about the data in plain English —
+"how many quotations are pending approval?" becomes SQL, runs, and comes back as
+a sentence. It runs as a FastAPI microservice in `services/assistant`, alongside
+the dev database:
+
+```bash
+pnpm assistant:up      # builds and starts the agent on top of the dev db
+pnpm assistant:grant   # create the SELECT-only Postgres role it connects as
+```
+
+Then open any internal page and use the bubble in the bottom-right. It can only
+`SELECT`: that is enforced by the `dealflow_readonly` database role, not by a
+prompt. Full architecture, health checks and tuning in
+[docs/assistant.md](docs/assistant.md).
+
 ## Validation
 
 ```sh

@@ -3,24 +3,15 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createQuoteAction } from "@/server/actions/quotations";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CustomerPicker, type CustomerOption } from "./customer-picker";
 import { Label } from "@/components/ui/label";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
 import { Plus } from "@/components/icons";
 import { FormError } from "@/components/layout/form-error";
-export function CreateQuote({
-  customers,
-}: {
-  customers: { id: string; name: string; tier: string }[];
-}) {
+export function CreateQuote() {
   const formId = useId();
-  const [id, setId] = useState(""),
+  const [customer, setCustomer] = useState<CustomerOption | null>(null),
+    [id, setId] = useState(""),
     [error, setError] = useState(""),
     [pending, start] = useTransition(),
     router = useRouter();
@@ -38,18 +29,15 @@ export function CreateQuote({
       }}
     >
       <Label>Customer</Label>
-      <Select value={id} onValueChange={setId}>
-        <SelectTrigger aria-label="Customer">
-          <SelectValue placeholder="Choose a customer" />
-        </SelectTrigger>
-        <SelectContent>
-          {customers.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.name} · {c.tier}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <CustomerPicker
+        selected={customer}
+        value={id}
+        onChange={(next) => {
+          setId(next.id);
+          setCustomer(next);
+        }}
+        disabled={pending}
+      />
       <p className="text-sm text-muted-foreground">
         The customer’s tier and price list determine catalogue pricing and
         discount ceilings.

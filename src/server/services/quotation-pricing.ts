@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { requireQuotationCustomer } from "@/domain/quotation/require-customer";
 import type { Tx } from "@/server/db";
 import { NotFound } from "@/domain/errors";
 import { priceQuotation } from "@/domain/pricing/price-quotation";
@@ -9,11 +10,13 @@ export async function repriceQuotation(tx: Tx, id: string) {
     include: { lines: true, customer: true },
   });
   if (!q) throw new NotFound("Quotation no longer exists.");
+  // Ceilings are tier-derived, so pricing cannot run before a customer is set.
+  const customer = requireQuotationCustomer(q);
   const policy = await getActivePolicy(tx, "DISCOUNT_RISK");
   const result = priceQuotation({
     lines: q.lines,
     orderDiscountBp: q.orderDiscountBp,
-    tierCeilingBp: policy.payload.tierCeilingsBp[q.customer.tier],
+    tierCeilingBp: policy.payload.tierCeilingsBp[customer.tier],
     categoryCeilingsBp: policy.payload.categoryCeilingsBp,
   });
   for (const line of result.lines) {

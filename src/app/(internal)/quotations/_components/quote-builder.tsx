@@ -113,13 +113,11 @@ function TotalRow({
 type Props = {
   data: Awaited<ReturnType<typeof getQuotation>>;
   products: Awaited<ReturnType<typeof quotationCatalogue>>;
-  customers: CustomerOption[];
   children?: React.ReactNode;
 };
 export function QuoteBuilder({
-  data: { quote: q, actor },
+  data: { quote: q, actor, customerNames },
   products,
-  customers,
   children,
 }: Props) {
   const [lines, setLines] = useState(
@@ -129,7 +127,7 @@ export function QuoteBuilder({
     [note, setNote] = useState(q.customerNote ?? ""),
     [delivery, setDelivery] = useState(q.requestedDeliveryDate ?? undefined),
     [valid, setValid] = useState(q.validUntil ?? undefined),
-    [customerId, setCustomerId] = useState(q.customerId);
+    [customerId, setCustomerId] = useState(q.customerId ?? "");
   const [picker, setPicker] = useState(false),
     [productId, setProductId] = useState(""),
     [planId, setPlanId] = useState(""),
@@ -142,6 +140,9 @@ export function QuoteBuilder({
       "revise" | "cancel" | "customer" | null
     >(null),
     [error, setError] = useState(""),
+    // Per-field messages, so a missing customer reads as a form error on the
+    // field rather than a disabled button with no explanation.
+    [fieldErrors, setFieldErrors] = useState<{ customer?: string }>({}),
     // Href held back by the unsaved-changes guard until the user decides.
     [leaveTo, setLeaveTo] = useState<string | null>(null),
     [pending, start] = useTransition();
@@ -161,19 +162,16 @@ export function QuoteBuilder({
     note !== (q.customerNote ?? "") ||
     delivery?.getTime() !== q.requestedDeliveryDate?.getTime() ||
     valid?.getTime() !== q.validUntil?.getTime();
-  const customerChanged = customerId !== q.customerId;
+  const customerChanged = customerId !== (q.customerId ?? "");
   const dirty = termsDirty || customerChanged;
-  const customerOptions = customers.some(
-    (customer) => customer.id === q.customerId,
-  )
-    ? customers
-    : [
-        { id: q.customerId, name: q.customer.name, tier: q.customer.tier },
-        ...customers,
-      ];
-  const selectedCustomer = customerOptions.find(
-    (customer) => customer.id === customerId,
-  );
+  // Only the chosen customer is held locally; the picker fetches the rest.
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerOption | null>(
+      q.customer
+        ? { id: q.customer.id, name: q.customer.name, tier: q.customer.tier }
+        : null,
+    );
+
   useEffect(() => {
     if (!dirty && !pending) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -208,6 +206,23 @@ export function QuoteBuilder({
       document.removeEventListener("click", navigate, true);
     };
   }, [dirty, pending]);
+  /**
+   * Client-side required check. The service validates this too - this exists so
+   * the message lands on the field the user has to fix.
+   */
+  function hasCustomer() {
+    if (customerId) {
+      setFieldErrors((prev) => ({ ...prev, customer: undefined }));
+      return true;
+    }
+    setFieldErrors((prev) => ({
+      ...prev,
+      customer:
+        "Customer is required. Pricing, discount limits and currency come from it.",
+    }));
+    return false;
+  }
+
   /** Refills the builder from the saved quotation, dropping local edits. */
   function reloadFromServer() {
     setLines(
@@ -221,7 +236,12 @@ export function QuoteBuilder({
     setNote(q.customerNote ?? "");
     setDelivery(q.requestedDeliveryDate ?? undefined);
     setValid(q.validUntil ?? undefined);
-    setCustomerId(q.customerId);
+    setCustomerId(q.customerId ?? "");
+    setSelectedCustomer(
+      q.customer
+        ? { id: q.customer.id, name: q.customer.name, tier: q.customer.tier }
+        : null,
+    );
     setError("");
     router.refresh();
   }
@@ -277,7 +297,9 @@ export function QuoteBuilder({
             <Button
               variant="outline"
               disabled={pending || dirty}
-              onClick={() => setPicker(true)}
+              onClick={() => {
+                if (hasCustomer()) setPicker(true);
+              }}
             >
               <Plus aria-hidden="true" />
               Add product
@@ -306,7 +328,9 @@ export function QuoteBuilder({
         {editable && (
           <Button
             disabled={pending || dirty || !q.lines.length}
-            onClick={() => run(() => submitQuoteAction(version))}
+            onClick={() => {
+              if (hasCustomer()) run(() => submitQuoteAction(version));
+            }}
           >
             <PaperPlaneTilt aria-hidden="true" />
             Submit for approval
@@ -380,19 +404,44 @@ export function QuoteBuilder({
         </CardHeader>
         <CardContent className="grid gap-5 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Customer</Label>
+            <Label htmlFor="quote-customer">
+              Customer
+              <span aria-hidden="true" className="text-destructive">
+                *
+              </span>
+              <span className="sr-only">(required)</span>
+            </Label>
             {editable ? (
               <CustomerPicker
-                customers={customerOptions}
+                id="quote-customer"
+                selected={selectedCustomer}
                 value={customerId}
-                onChange={setCustomerId}
+                invalid={Boolean(fieldErrors.customer)}
+                errorId={fieldErrors.customer ? "quote-customer-error" : undefined}
+                onChange={(customer) => {
+                  setCustomerId(customer.id);
+                  setSelectedCustomer(customer);
+                  // Fixing the field clears its error immediately.
+                  setFieldErrors((prev) => ({ ...prev, customer: undefined }));
+                }}
                 disabled={pending || termsDirty}
               />
             ) : (
               <p className="font-medium">
-                {q.customer.name} · {q.customer.tier}
+                {q.customer
+                  ? `${q.customer.name} · ${q.customer.tier}`
+                  : "No customer selected"}
               </p>
             )}
+            {fieldErrors.customer ? (
+              <p
+                id="quote-customer-error"
+                role="alert"
+                className="text-destructive text-xs"
+              >
+                {fieldErrors.customer}
+              </p>
+            ) : null}
             <p className="text-muted-foreground text-xs">
               Owner: {q.owner.name}
             </p>
@@ -725,9 +774,7 @@ export function QuoteBuilder({
           [q.ownerId]: q.owner.name,
           [actor.id]: actor.name ?? "You",
         }}
-        customerNames={Object.fromEntries(
-          customerOptions.map((customer) => [customer.id, customer.name]),
-        )}
+        customerNames={customerNames}
       />
       <Dialog
         open={!!operation}
@@ -746,7 +793,9 @@ export function QuoteBuilder({
             </DialogTitle>
             <DialogDescription>
               {operation === "customer"
-                ? `Switch from ${q.customer.name} to ${selectedCustomer?.name ?? "the selected customer"}? All lines will be repriced using the new customer's price list, currency and discount limits. This saves a new snapshot.`
+                ? q.customer
+                  ? `Switch from ${q.customer.name} to ${selectedCustomer?.name ?? "the selected customer"}? All lines will be repriced using the new customer's price list, currency and discount limits. This saves a new snapshot.`
+                  : `Set the customer to ${selectedCustomer?.name ?? "the selected customer"}? Pricing, currency and discount limits come from it.`
                 : "Prior approvals and acceptance will no longer apply. Explain your decision."}
             </DialogDescription>
           </DialogHeader>

@@ -129,9 +129,9 @@ export async function getRecommendationSample(
       where: { status: "ACTIVE" },
       include: { stockLevels: true },
     }),
-    (quote.priceListId ?? quote.customer.priceListId)
+    (quote.priceListId ?? quote.customer?.priceListId)
       ? prisma.priceList.findUnique({
-          where: { id: (quote.priceListId ?? quote.customer.priceListId)! },
+          where: { id: (quote.priceListId ?? quote.customer?.priceListId)! },
           include: { items: true },
         })
       : Promise.resolve(null),

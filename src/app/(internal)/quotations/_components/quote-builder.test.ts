@@ -14,6 +14,11 @@ vi.mock("@/server/actions/quotations", () => ({
 vi.mock("../_actions/change-customer", () => ({
   changeQuotationCustomerAction: vi.fn(),
 }));
+// The picker searches on demand; stub the action so the client component under
+// test does not pull the server query (and auth) into the module graph.
+vi.mock("../_actions/search-customers", () => ({
+  searchCustomersAction: vi.fn(async () => []),
+}));
 vi.mock("@/components/layout/workspace-actions", () => ({
   WorkspaceActions: ({ children }: { children: ReactNode }) =>
     createElement("aside", null, children),
@@ -44,7 +49,6 @@ function render(role: string, status = "DRAFT", id = "owner") {
       },
     },
     products: [],
-    customers: [{ id: "customer", name: "Alpha", tier: "GOLD" }],
   } as unknown as Parameters<typeof QuoteBuilder>[0];
   return renderToStaticMarkup(createElement(QuoteBuilder, props));
 }

@@ -88,7 +88,7 @@ export default async function QuotationsPage({
                 key: "customer",
                 header: "Customer",
                 sortable: true,
-                cell: (q) => q.customer.name,
+                cell: (q) => q.customer?.name ?? "No customer",
               },
               {
                 key: "owner",

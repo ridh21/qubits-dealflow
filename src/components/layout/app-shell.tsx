@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import {
   logoutAction,
   portalLogoutAction,
@@ -88,11 +89,10 @@ export function AppShell({
               <div className="flex items-center justify-between gap-2">
                 <Link
                   href={portal ? "/portal" : "/dashboard"}
+                  aria-label="DealFlow360 home"
                   className="font-display flex items-center gap-2 font-semibold"
                 >
-                  <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-lg">
-                    D
-                  </span>
+                  <BrandMark className="size-8" />
                   <span className="group-data-[collapsible=icon]:hidden">
                     DealFlow360
                   </span>

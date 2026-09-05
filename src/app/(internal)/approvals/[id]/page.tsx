@@ -39,7 +39,7 @@ export default async function ApprovalPage({
     <>
       <PageHeader
         title={`Review ${r.quotation.number} · v${r.quotationVersion}`}
-        description={`${r.quotation.customer.name} · ${r.riskBand} risk · ${r.status}`}
+        description={`${r.quotation.customer?.name ?? "—"} · ${r.riskBand} risk · ${r.status}`}
       />
       <DecisionControls
         stepId={step?.id}

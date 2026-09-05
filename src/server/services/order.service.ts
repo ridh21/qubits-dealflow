@@ -1,4 +1,5 @@
 import { startSubscriptionsForOrder } from "./subscription-billing.service";
+import { requireQuotationCustomerId } from "@/domain/quotation/require-customer";
 import type { Tx } from "@/server/db";
 import type { SessionUser } from "@/server/auth/guards";
 import { Conflict, ValidationError } from "@/domain/errors";
@@ -36,7 +37,7 @@ export async function createOrderFromQuotation(
       number: await nextNumber(tx, "ORD"),
       quotationId,
       quotationVersion: version,
-      customerId: q.customerId,
+      customerId: requireQuotationCustomerId(q),
       currency: q.currency,
       promisedDeliveryDate: q.requestedDeliveryDate,
       lines: {

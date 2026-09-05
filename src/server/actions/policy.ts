@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { requireQuotationCustomer } from "@/domain/quotation/require-customer";
 import { requireInternal, requireAdmin } from "@/server/auth/guards";
 import {
   toActionError,
@@ -74,8 +75,10 @@ export async function listPolicyQuotesAction(query: string) {
 export async function loadRiskSampleAction(quoteId: string) {
   return run(async (): Promise<SimInput> => {
     const quote = await getPolicySampleQuote(await requireInternal(), quoteId);
+    // Simulation is tier-driven, so an unassigned draft cannot be a sample.
+    const customer = requireQuotationCustomer(quote);
     return {
-      tier: quote.customer.tier,
+      tier: customer.tier,
       orderDiscountBp: quote.orderDiscountBp,
       lines: quote.lines.map((l) => ({
         id: l.id,

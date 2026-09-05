@@ -1,0 +1,16 @@
+import { chromium } from "@playwright/test";
+const [out, id] = process.argv.slice(2);
+const b = await chromium.launch();
+const ctx = await b.newContext({ acceptDownloads: true });
+const p = await ctx.newPage();
+await p.goto("http://localhost:3000/login", { waitUntil: "networkidle" });
+await p.fill("#email", "priya.finance@yopmail.com");
+await p.fill("#password", "Password123!");
+await p.click("button[type=submit]");
+await p.waitForURL(/dashboard|invoices/, { timeout: 30000 }).catch(() => {});
+await p.waitForTimeout(1500);
+const res = await p.request.get(`http://localhost:3000/api/export/invoice/${id}/pdf`);
+console.log("pdf status:", res.status(), res.headers()["content-type"]);
+const { writeFileSync } = await import("node:fs");
+writeFileSync(`${out}/invoice-before.pdf`, Buffer.from(await res.body()));
+await b.close();

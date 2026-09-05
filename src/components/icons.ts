@@ -12,6 +12,7 @@ export {
   CaretRight,
   CaretUpDown,
   ChartLineUp,
+  ChatCircleDots,
   Check,
   CheckCircle,
   ClockCounterClockwise,
@@ -25,6 +26,7 @@ export {
   Gauge,
   Gear,
   Info,
+  List,
   ListChecks,
   MagnifyingGlass,
   Package,
@@ -37,6 +39,7 @@ export {
   ShieldCheck,
   SignOut,
   SlidersHorizontal,
+  Sparkle,
   Stack,
   Storefront,
   Tag,
@@ -46,8 +49,10 @@ export {
   User as UserIcon,
   Users,
   Warehouse,
+  Warning,
   WarningCircle,
   X,
+  XCircle,
 } from "@phosphor-icons/react/dist/ssr";
 
 export { PauseIcon as Pause, PlayIcon as Play } from "@phosphor-icons/react/dist/ssr";

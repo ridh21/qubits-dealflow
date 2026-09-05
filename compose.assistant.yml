@@ -1,0 +1,26 @@
+# The read-only assistant service.
+#
+# Layers on top of compose.dev.yml so the agent reaches Postgres as `db:5432`
+# on the same network. Always pass both files together:
+#
+#   pnpm assistant:up      # docker compose -f compose.dev.yml -f compose.assistant.yml up -d
+#   pnpm assistant:logs
+#   pnpm assistant:down
+services:
+  # LangGraph SQL agent behind an HTTP API. Reached only through the Next.js
+  # proxy at /api/assistant, which checks the internal session first — hence
+  # binding to 127.0.0.1 rather than 0.0.0.0.
+  assistant-api:
+    build:
+      context: ./services/assistant
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside the network the assistant reaches Postgres by service name, and
+      # always as the SELECT-only role — never as the application role.
+      ASSISTANT_DATABASE_URL: postgresql://dealflow_readonly:${ASSISTANT_DB_PASSWORD:-dealflow_readonly}@db:5432/${POSTGRES_DB:-dealflow_dev}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy

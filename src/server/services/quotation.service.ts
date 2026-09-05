@@ -1,7 +1,7 @@
 import { emit } from "@/server/events";
 import { Prisma, type Quotation } from "@prisma/client";
 import type { z } from "zod";
-import { prisma, withTx, lockRow, type Tx } from "@/server/db";
+import { withTx, lockRow, type Tx } from "@/server/db";
 import { writeAudit } from "@/server/audit";
 import { nextNumber } from "@/server/sequences";
 import type { SessionUser } from "@/server/auth/guards";
@@ -120,39 +120,42 @@ async function finishEdit(
   });
   return { id: q.id, version: q.version + 1 };
 }
-/** Most recently quoted customer for this owner, else any active customer. */
-async function defaultCustomerFor(tx: Tx, actor: SessionUser) {
-  const recent = await tx.quotation.findFirst({
-    where: { ownerId: actor.id, customer: { isActive: true } },
-    orderBy: { createdAt: "desc" },
-    select: { customer: { include: { priceList: true } } },
-  });
-  if (recent?.customer) return recent.customer;
-  return tx.customer.findFirst({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    include: { priceList: true },
-  });
-}
-
 /**
- * Starts a draft in one click, with no customer chosen up front.
+ * Starts an empty draft: no customer, no lines.
  *
- * This is a separate entry point rather than making `customerId` optional on
- * CreateQuoteInput: "create a quotation for this customer" should keep failing
- * loudly when the customer is missing. Here the omission is the whole point, so
- * the customer is resolved first and the normal create path runs unchanged.
+ * The customer is genuinely unknown at this point, so the draft records that
+ * rather than guessing one - a wrong guess would silently drive pricing,
+ * discount ceilings and currency. `requireCustomer` is what enforces it later.
  */
 export async function startDraftQuotation(actor: SessionUser) {
   if (!SALES_ROLES.includes(actor.role as (typeof SALES_ROLES)[number]))
     throw new Forbidden();
-  const customer = await defaultCustomerFor(prisma, actor);
-  if (!customer)
-    throw new ValidationError(
-      "No active customer exists yet. Add a customer before quoting.",
-    );
-  return createQuotation(actor, { customerId: customer.id });
+  return withTx(async (tx) => {
+    const portal = await getActivePolicy(tx, "PORTAL");
+    const q = await tx.quotation.create({
+      data: {
+        number: await nextNumber(tx, "Q"),
+        ownerId: actor.id,
+        currency: DEFAULT_CURRENCY,
+        validUntil: new Date(
+          Date.now() + portal.payload.quoteValidityDays * 86400000,
+        ),
+      },
+    });
+    await snapshotVersion(tx, q.id, actor, "Quotation created");
+    await writeAudit(tx, {
+      actorId: actor.id,
+      actorType: "USER",
+      entityType: "Quotation",
+      entityId: q.id,
+      action: "QUOTATION.CREATED",
+      version: 1,
+    });
+    return { id: q.id, version: q.version };
+  });
 }
+
+export { requireQuotationCustomerId } from "@/domain/quotation/require-customer";
 
 export async function createQuotation(
   actor: SessionUser,

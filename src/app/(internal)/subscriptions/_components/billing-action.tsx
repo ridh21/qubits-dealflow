@@ -1,6 +1,6 @@
 "use client";
 import { useTransition } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
 import { runBillingAction } from "@/server/actions/subscriptions";
 import { WorkspaceActions } from "@/components/layout/workspace-actions";
