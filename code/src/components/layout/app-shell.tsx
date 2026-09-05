@@ -55,6 +55,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin/policy", label: "Policy Center" },
   { href: "/admin/plans", label: "Plans & entitlements" },
   { href: "/admin/emails", label: "Email outbox" },
+  { href: "/admin/jobs", label: "Billing jobs" },
 ];
 
 export function AppShell({
