@@ -77,3 +77,29 @@ export async function overridePlanAction(input: unknown) {
     paths,
   });
 }
+
+export async function decideConsolidationAction(input: unknown) {
+  return runAction({
+    roles,
+    schema: z.object({
+      backorderId: id,
+      decision: z.enum(["ACCEPT", "DECLINE"]),
+      warehouseId: id,
+      qty: z.number().int().positive(),
+    }),
+    input,
+    execute: (actor, data) => {
+      const expected = { warehouseId: data.warehouseId, qty: data.qty };
+      return data.decision === "DECLINE"
+        ? service.declineConsolidation(actor, data.backorderId, expected)
+        : service.consolidateBackorder(
+            actor,
+            data.backorderId,
+            data.warehouseId,
+            data.qty,
+            expected,
+          );
+    },
+    paths,
+  });
+}

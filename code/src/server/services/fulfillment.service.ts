@@ -13,7 +13,12 @@ import {
 } from "@/domain/errors";
 import { getActivePolicy } from "./policy.service";
 import { planSplit } from "@/domain/split/plan-split";
-import { reserve, shipOut, lockStockRows, lockWarehouseRows } from "./stock.service";
+import {
+  reserve,
+  shipOut,
+  lockStockRows,
+  lockWarehouseRows,
+} from "./stock.service";
 import { nextNumber } from "@/server/sequences";
 import { writeAudit } from "@/server/audit";
 function requireOps(actor: SessionUser) {
@@ -462,6 +467,7 @@ export async function consolidateBackorder(
   backorderId: string,
   warehouseId: string,
   qty: number,
+  expectedSuggestion?: { warehouseId: string; qty: number },
 ) {
   requireOps(actor);
   return withTx(async (tx) => {
@@ -484,6 +490,15 @@ export async function consolidateBackorder(
       qty > b.qty
     )
       throw new ValidationError("Choose a quantity within the open backorder.");
+    if (b.orderLine.order.status !== "OPEN")
+      throw new ValidationError("Order is not open.");
+    if (
+      expectedSuggestion &&
+      (b.status !== "CONSOLIDATION_SUGGESTED" ||
+        b.suggestedWarehouseId !== expectedSuggestion.warehouseId ||
+        b.suggestedQty !== expectedSuggestion.qty)
+    )
+      throw new Conflict("The suggestion changed. Reload before deciding.");
     const plan = b.orderLine.order.plan;
     if (!plan || plan.status === "SUGGESTED")
       throw new ValidationError(
@@ -521,10 +536,13 @@ export async function consolidateBackorder(
     });
     await tx.backorder.update({
       where: { id: backorderId },
-      data:
-        qty === b.qty
-          ? { status: "ALLOCATED" }
-          : { qty: b.qty - qty, status: "OPEN" },
+      data: {
+        suggestedWarehouseId: null,
+        suggestedQty: null,
+        ...(qty === b.qty
+          ? { status: "ALLOCATED" as const }
+          : { qty: b.qty - qty, status: "OPEN" as const }),
+      },
     });
     const openBackorders = await tx.backorder.count({
       where: {
@@ -545,5 +563,187 @@ export async function consolidateBackorder(
       after: { warehouseId, qty, shipmentId: shipment.id },
     });
     return { id: shipment.id };
+  });
+}
+
+/** Receipt handlers propose only; Ops acceptance remains the reservation boundary. */
+export async function onStockReceived(input: {
+  warehouseId: string;
+  productId: string;
+  qty: number;
+}) {
+  if (!Number.isInteger(input.qty) || input.qty <= 0)
+    throw new ValidationError("Receipt quantity must be positive.");
+  return withTx(async (tx) => {
+    const schema =
+      new URL(process.env.DATABASE_URL!).searchParams.get("schema") ?? "public";
+    // Serialize receipts for the same product, including receipts at different warehouses.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`fulfillment:${schema}:${input.productId}`}))`;
+    const receipt = await tx.stockMovement.findFirst({
+      where: {
+        warehouseId: input.warehouseId,
+        productId: input.productId,
+        type: "RECEIPT",
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    if (!receipt) return { suggestions: 0 };
+    const key = `fulfillmentReceipt:${input.warehouseId}:${input.productId}`;
+    const processed = await tx.setting.findUnique({ where: { key } });
+    if (
+      (processed?.value as { receiptId?: string } | null)?.receiptId ===
+      receipt.id
+    )
+      return { suggestions: 0 };
+
+    const where = {
+      status: {
+        in: ["OPEN", "CONSOLIDATION_SUGGESTED"] as (
+          | "OPEN"
+          | "CONSOLIDATION_SUGGESTED"
+        )[],
+      },
+      orderLine: {
+        productId: input.productId,
+        kind: "PHYSICAL" as const,
+        order: {
+          status: "OPEN" as const,
+          plan: {
+            status: {
+              in: ["ACCEPTED", "OVERRIDDEN"] as ("ACCEPTED" | "OVERRIDDEN")[],
+            },
+          },
+        },
+      },
+    };
+    const candidates = await tx.backorder.findMany({
+      where,
+      include: { orderLine: true },
+    });
+    for (const orderId of [
+      ...new Set(candidates.map((b) => b.orderLine.orderId)),
+    ].sort())
+      await lockRow(tx, "Order", orderId);
+    const backorders = await tx.backorder.findMany({
+      where: { ...where, id: { in: candidates.map((b) => b.id) } },
+      include: {
+        orderLine: {
+          include: {
+            order: { include: { plan: { include: { allocations: true } } } },
+          },
+        },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const stock = await warehouseStock(tx);
+    const policy = await getActivePolicy(tx, "FULFILLMENT");
+    const recipients = await tx.user.findMany({
+      where: { role: { in: ["ADMIN", "FINANCE"] }, isActive: true },
+      select: { id: true },
+    });
+    let suggestions = 0;
+    for (const b of backorders) {
+      const used = new Set(
+        b.orderLine.order.plan!.allocations.map((a) => a.warehouseId),
+      );
+      const choices = stock
+        .filter((w) => (w.available[input.productId] ?? 0) > 0)
+        .sort(
+          (a, z) =>
+            Number(used.has(z.id)) - Number(used.has(a.id)) ||
+            (policy.payload.tieBreak === "PRIORITY"
+              ? a.priority - z.priority
+              : 0) ||
+            a.code.localeCompare(z.code),
+        );
+      const warehouse = choices[0];
+      const qty = warehouse
+        ? Math.min(b.qty, warehouse.available[input.productId])
+        : null;
+      const warehouseId = warehouse?.id ?? null;
+      if (warehouse && qty) warehouse.available[input.productId] -= qty;
+      // Budget availability across suggestions without changing StockLevel.reserved.
+      if (
+        b.suggestedWarehouseId === warehouseId &&
+        b.suggestedQty === qty &&
+        b.status === (qty ? "CONSOLIDATION_SUGGESTED" : "OPEN")
+      )
+        continue;
+      await tx.backorder.update({
+        where: { id: b.id },
+        data: {
+          status: qty ? "CONSOLIDATION_SUGGESTED" : "OPEN",
+          suggestedWarehouseId: warehouseId,
+          suggestedQty: qty,
+        },
+      });
+      await writeAudit(tx, {
+        actorType: "SYSTEM",
+        entityType: "Backorder",
+        entityId: b.id,
+        action: qty
+          ? "BACKORDER.CONSOLIDATION_SUGGESTED"
+          : "BACKORDER.SUGGESTION_UNAVAILABLE",
+        before: { warehouseId: b.suggestedWarehouseId, qty: b.suggestedQty },
+        after: { warehouseId, qty, receiptId: receipt.id },
+      });
+      if (qty) {
+        suggestions++;
+        await tx.notification.createMany({
+          data: recipients.map(({ id: userId }) => ({
+            userId,
+            type: "CONSOLIDATION_SUGGESTED",
+            title: `${b.orderLine.order.number}: stock available`,
+            body: `${qty} units of ${b.orderLine.productName} can be reserved at ${warehouse!.name}. Review the suggestion.`,
+            href: `/fulfillment/${b.orderLine.orderId}`,
+          })),
+        });
+      }
+    }
+    await tx.setting.upsert({
+      where: { key },
+      create: { key, value: { receiptId: receipt.id } },
+      update: { value: { receiptId: receipt.id } },
+    });
+    return { suggestions };
+  });
+}
+
+export async function declineConsolidation(
+  actor: SessionUser,
+  backorderId: string,
+  expected: { warehouseId: string; qty: number },
+) {
+  requireOps(actor);
+  return withTx(async (tx) => {
+    const initial = await tx.backorder.findUniqueOrThrow({
+      where: { id: backorderId },
+      include: { orderLine: true },
+    });
+    await lockRow(tx, "Order", initial.orderLine.orderId);
+    await lockRow(tx, "Backorder", backorderId);
+    const b = await tx.backorder.findUniqueOrThrow({
+      where: { id: backorderId },
+    });
+    if (b.status === "OPEN" && !b.suggestedWarehouseId) return { id: b.id };
+    if (
+      b.status !== "CONSOLIDATION_SUGGESTED" ||
+      b.suggestedWarehouseId !== expected.warehouseId ||
+      b.suggestedQty !== expected.qty
+    )
+      throw new Conflict("The suggestion changed. Reload before deciding.");
+    await tx.backorder.update({
+      where: { id: b.id },
+      data: { status: "OPEN", suggestedWarehouseId: null, suggestedQty: null },
+    });
+    await writeAudit(tx, {
+      actorId: actor.id,
+      actorType: "USER",
+      entityType: "Backorder",
+      entityId: b.id,
+      action: "BACKORDER.CONSOLIDATION_DECLINED",
+      before: expected,
+    });
+    return { id: b.id };
   });
 }

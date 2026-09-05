@@ -1,5 +1,6 @@
 import { runForQuotation } from "./services/deal-health.service";
 import { on } from "./events";
+import { onStockReceived } from "./services/fulfillment.service";
 
 let registered = false;
 
@@ -18,10 +19,8 @@ export function registerEventHandlers() {
     });
   }
 
-  on("stock.received", ({ warehouseId, productId, qty }) => {
-    console.info(
-      `[events] stock.received ${qty} of ${productId} @ ${warehouseId}`,
-    );
+  on("stock.received", async (receipt) => {
+    await onStockReceived(receipt);
   });
   on("user.approved", ({ userId, role }) => {
     console.info(`[events] user.approved ${userId} as ${role}`);
