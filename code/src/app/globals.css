@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-goga);
+  --font-heading: var(--font-goga);
+  --color-primary-50: var(--primary-50);
+  --color-primary-100: var(--primary-100);
+  --color-primary-600: var(--primary-600);
+  --color-primary-700: var(--primary-700);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.22 0.01 60);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.01 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.01 60);
+
+  --primary: oklch(0.70 0.19 45);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-50: oklch(0.98 0.02 60);
+  --primary-100: oklch(0.95 0.05 55);
+  --primary-600: oklch(0.64 0.19 42);
+  --primary-700: oklch(0.56 0.17 40);
+
+  --secondary: oklch(0.96 0.01 70);
+  --secondary-foreground: oklch(0.28 0.02 55);
+  --muted: oklch(0.975 0.005 75);
+  --muted-foreground: oklch(0.5 0.01 60);
+  --accent: var(--primary-50);
+  --accent-foreground: var(--primary-700);
+
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.62 0.17 150);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.78 0.16 80);
+  --warning-foreground: oklch(0.24 0.03 70);
+
+  --border: oklch(0.92 0.006 75);
+  --input: oklch(0.92 0.006 75);
+  --ring: oklch(0.72 0.19 45);
+
+  --chart-1: oklch(0.64 0.19 42);
+  --chart-2: oklch(0.78 0.14 55);
+  --chart-3: oklch(0.88 0.07 65);
+  --chart-4: oklch(0.55 0.01 60);
+  --chart-5: oklch(0.75 0.008 70);
+
+  --radius: 0.625rem;
+  --sidebar: oklch(0.99 0.004 75);
+  --sidebar-foreground: oklch(0.22 0.01 60);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: var(--primary-50);
+  --sidebar-accent-foreground: var(--primary-700);
+  --sidebar-border: oklch(0.92 0.006 75);
+  --sidebar-ring: oklch(0.72 0.19 45);
+}
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+@layer base {
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@utility lining {
+  position: relative;
+  margin-inline: auto;
+  max-width: 72rem;
+  border-inline: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+}
