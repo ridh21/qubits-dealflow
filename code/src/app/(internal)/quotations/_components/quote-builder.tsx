@@ -4,6 +4,13 @@ import { submitQuoteAction } from "@/server/actions/approvals";
 import { PaperPlaneTilt } from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { VersionHistory } from "./version-history";
+import { CustomerPicker, type CustomerOption } from "./customer-picker";
+import {
+  canEditQuotation,
+  canManageQuotation,
+  canReviseQuotation,
+} from "./quotation-access";
+import { changeQuotationCustomerAction } from "../_actions/change-customer";
 import Link from "next/link";
 import {
   Check,
@@ -69,11 +76,13 @@ import type { CycleSummary } from "@/domain/pricing/types";
 type Props = {
   data: Awaited<ReturnType<typeof getQuotation>>;
   products: Awaited<ReturnType<typeof quotationCatalogue>>;
+  customers: CustomerOption[];
   children?: React.ReactNode;
 };
 export function QuoteBuilder({
   data: { quote: q, actor },
   products,
+  customers,
   children,
 }: Props) {
   const [lines, setLines] = useState(
@@ -82,7 +91,8 @@ export function QuoteBuilder({
     [discount, setDiscount] = useState(q.orderDiscountBp),
     [note, setNote] = useState(q.customerNote ?? ""),
     [delivery, setDelivery] = useState(q.requestedDeliveryDate ?? undefined),
-    [valid, setValid] = useState(q.validUntil ?? undefined);
+    [valid, setValid] = useState(q.validUntil ?? undefined),
+    [customerId, setCustomerId] = useState(q.customerId);
   const [picker, setPicker] = useState(false),
     [productId, setProductId] = useState(""),
     [planId, setPlanId] = useState(""),
@@ -91,15 +101,15 @@ export function QuoteBuilder({
     [search, setSearch] = useState(""),
     [history, setHistory] = useState(false),
     [reason, setReason] = useState(""),
-    [operation, setOperation] = useState<"revise" | "cancel" | null>(null),
+    [operation, setOperation] = useState<
+      "revise" | "cancel" | "customer" | null
+    >(null),
     [error, setError] = useState(""),
     [pending, start] = useTransition();
   const router = useRouter(),
-    editable =
-      ["DRAFT", "REVISION_REQUESTED"].includes(q.status) &&
-      actor.role !== "FINANCE",
+    editable = canEditQuotation(q, actor),
     version = { id: q.id, expectedVersion: q.version };
-  const dirty =
+  const termsDirty =
     JSON.stringify(lines) !==
       JSON.stringify(
         q.lines.map((l) => ({
@@ -112,11 +122,36 @@ export function QuoteBuilder({
     note !== (q.customerNote ?? "") ||
     delivery?.getTime() !== q.requestedDeliveryDate?.getTime() ||
     valid?.getTime() !== q.validUntil?.getTime();
+  const customerChanged = customerId !== q.customerId;
+  const dirty = termsDirty || customerChanged;
+  const customerOptions = customers.some(
+    (customer) => customer.id === q.customerId,
+  )
+    ? customers
+    : [
+        { id: q.customerId, name: q.customer.name, tier: q.customer.tier },
+        ...customers,
+      ];
+  const selectedCustomer = customerOptions.find(
+    (customer) => customer.id === customerId,
+  );
   useEffect(() => {
     if (!dirty && !pending) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
     const navigate = (e: MouseEvent) => {
-      const link = (e.target as HTMLElement).closest("a[href]");
+      const link =
+        e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (link && pending) {
+        e.preventDefault();
+        e.stopPropagation();
+        setError(
+          "Wait for the current action to finish before leaving the workspace.",
+        );
+        return;
+      }
       if (
         link &&
         !window.confirm("Leave without saving your quotation changes?")
@@ -156,7 +191,7 @@ export function QuoteBuilder({
         {editable && (
           <>
             <Button
-              disabled={pending || !dirty}
+              disabled={pending || !termsDirty || customerChanged}
               onClick={() =>
                 run(() =>
                   saveQuoteAction({
@@ -172,6 +207,14 @@ export function QuoteBuilder({
             >
               <Check aria-hidden="true" />
               {pending ? "Saving…" : "Save changes"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={pending || termsDirty || !customerChanged}
+              onClick={() => setOperation("customer")}
+            >
+              <Repeat aria-hidden="true" />
+              Apply customer change
             </Button>
             <Button
               variant="outline"
@@ -198,14 +241,12 @@ export function QuoteBuilder({
             </Button>
           </>
         )}
-        {!editable &&
-          actor.role !== "FINANCE" &&
-          !["CONFIRMED", "CANCELLED", "EXPIRED"].includes(q.status) && (
-            <Button onClick={() => setOperation("revise")}>
-              <Pencil aria-hidden="true" />
-              Create revision
-            </Button>
-          )}
+        {!editable && canReviseQuotation(q, actor) && (
+          <Button disabled={pending} onClick={() => setOperation("revise")}>
+            <Pencil aria-hidden="true" />
+            Create revision
+          </Button>
+        )}
         {editable && (
           <Button
             disabled={pending || dirty || !q.lines.length}
@@ -223,25 +264,44 @@ export function QuoteBuilder({
           variant="outline"
           disabled={pending}
           onClick={() => {
-            if (!dirty || window.confirm("Discard unsaved changes and reload?"))
-              window.location.reload();
+            if (
+              !dirty ||
+              window.confirm("Discard unsaved changes and reload?")
+            ) {
+              setLines(
+                q.lines.map((line) => ({
+                  id: line.id,
+                  qty: line.qty,
+                  discountBp: line.discountBp,
+                })),
+              );
+              setDiscount(q.orderDiscountBp);
+              setNote(q.customerNote ?? "");
+              setDelivery(q.requestedDeliveryDate ?? undefined);
+              setValid(q.validUntil ?? undefined);
+              setCustomerId(q.customerId);
+              setError("");
+              router.refresh();
+            }
           }}
         >
           Reload data
         </Button>
-        <Button variant="outline" asChild>
-          <Link href="/admin">
-            <ArrowSquareOut aria-hidden="true" />
-            Go to back-end
-          </Link>
-        </Button>
+        {actor.role === "ADMIN" && (
+          <Button variant="outline" asChild>
+            <Link href="/admin">
+              <ArrowSquareOut aria-hidden="true" />
+              Go to back-end
+            </Link>
+          </Button>
+        )}
         <Button variant="outline" asChild>
           <Link href="/quotations">
             <ArrowLeft aria-hidden="true" />
             Close workspace
           </Link>
         </Button>
-        {actor.role !== "FINANCE" &&
+        {canManageQuotation(q, actor) &&
           !["CONFIRMED", "CANCELLED"].includes(q.status) && (
             <Button
               variant="destructive"
@@ -257,31 +317,48 @@ export function QuoteBuilder({
         {error}
       </p>
       <div className="rounded-lg border bg-muted p-4 text-sm">
-        {dirty
-          ? "Unsaved changes. Save to recalculate totals and discount limits."
-          : editable
-            ? "Draft terms are editable. Prices are snapshotted; repricing is explicit."
-            : `Terms locked · ${q.status.replaceAll("_", " ").toLowerCase()}. Create a revision to change them.`}
+        {customerChanged
+          ? "Customer change pending. Apply it from Actions to reprice this quotation."
+          : dirty
+            ? "Unsaved changes. Save to recalculate totals and discount limits."
+            : editable
+              ? "Draft terms are editable. Prices are snapshotted; repricing is explicit."
+              : `Terms locked · ${q.status.replaceAll("_", " ").toLowerCase()}. Create a revision to change them.`}
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div>
           <p className="text-sm text-muted-foreground">Customer</p>
-          <p className="font-medium">
-            {q.customer.name} · {q.customer.tier}
-          </p>
+          {editable ? (
+            <CustomerPicker
+              customers={customerOptions}
+              value={customerId}
+              onChange={setCustomerId}
+              disabled={pending || termsDirty}
+            />
+          ) : (
+            <p className="font-medium">
+              {q.customer.name} · {q.customer.tier}
+            </p>
+          )}
+          {editable && (
+            <p className="text-xs text-muted-foreground">
+              Changing customer reapplies catalogue pricing and discount limits
+              and may change currency. Save other edits first.
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">Owner: {q.owner.name}</p>
         </div>
         <DatePicker
           label="Valid until"
           value={valid}
           onChange={setValid}
-          disabled={!editable || pending}
+          disabled={!editable || pending || customerChanged}
         />
         <DatePicker
           label="Requested delivery"
           value={delivery}
           onChange={setDelivery}
-          disabled={!editable || pending}
+          disabled={!editable || pending || customerChanged}
         />
       </div>
       <div className="overflow-x-auto rounded-xl border">
@@ -321,7 +398,7 @@ export function QuoteBuilder({
                     min={1}
                     className="w-20"
                     value={lines[i].qty}
-                    disabled={!editable || pending}
+                    disabled={!editable || pending || customerChanged}
                     onChange={(e) =>
                       setLines(
                         lines.map((x, j) =>
@@ -339,7 +416,7 @@ export function QuoteBuilder({
                     aria-label={`Discount for ${l.productName}`}
                     className="w-24"
                     value={lines[i].discountBp}
-                    disabled={!editable || pending}
+                    disabled={!editable || pending || customerChanged}
                     onChange={(value) =>
                       setLines(
                         lines.map((x, j) =>
@@ -403,7 +480,7 @@ export function QuoteBuilder({
             className="max-w-40"
             value={discount}
             onChange={setDiscount}
-            disabled={!editable || pending}
+            disabled={!editable || pending || customerChanged}
           />
           <p className="text-sm text-muted-foreground">
             Allocated proportionally over amounts after line discounts.
@@ -413,7 +490,7 @@ export function QuoteBuilder({
             id="customer-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            disabled={!editable || pending}
+            disabled={!editable || pending || customerChanged}
           />
         </section>
         <section className="space-y-4 rounded-xl border p-6">
@@ -561,7 +638,9 @@ export function QuoteBuilder({
           [q.ownerId]: q.owner.name,
           [actor.id]: actor.name ?? "You",
         }}
-        customerNames={{ [q.customerId]: q.customer.name }}
+        customerNames={Object.fromEntries(
+          customerOptions.map((customer) => [customer.id, customer.name]),
+        )}
       />
       <Dialog
         open={!!operation}
@@ -572,30 +651,49 @@ export function QuoteBuilder({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {operation === "revise" ? "Create revision" : "Cancel quotation"}
+              {operation === "customer"
+                ? "Change quotation customer"
+                : operation === "revise"
+                  ? "Create revision"
+                  : "Cancel quotation"}
             </DialogTitle>
             <DialogDescription>
-              Prior approvals and acceptance will no longer apply. Explain your
-              decision.
+              {operation === "customer"
+                ? `Switch from ${q.customer.name} to ${selectedCustomer?.name ?? "the selected customer"}? All lines will be repriced using the new customer's price list, currency and discount limits. This saves a new snapshot.`
+                : "Prior approvals and acceptance will no longer apply. Explain your decision."}
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            aria-label="Reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
+          {operation !== "customer" && (
+            <Textarea
+              aria-label="Reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          )}
           <Button
-            disabled={!reason.trim() || pending}
+            disabled={
+              pending ||
+              (operation === "customer"
+                ? !customerChanged || termsDirty
+                : !reason.trim())
+            }
             variant={operation === "cancel" ? "destructive" : "default"}
             onClick={() =>
               run(() =>
-                (operation === "revise"
-                  ? reviseQuoteAction
-                  : cancelQuoteAction)({ ...version, reason }),
+                operation === "customer"
+                  ? changeQuotationCustomerAction({ ...version, customerId })
+                  : (operation === "revise"
+                      ? reviseQuoteAction
+                      : cancelQuoteAction)({ ...version, reason }),
               )
             }
           >
-            Confirm {operation === "revise" ? "revision" : "cancellation"}
+            Confirm{" "}
+            {operation === "customer"
+              ? "customer change"
+              : operation === "revise"
+                ? "revision"
+                : "cancellation"}
           </Button>
         </DialogContent>
       </Dialog>
