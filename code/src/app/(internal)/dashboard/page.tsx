@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { quotationScope } from "@/server/queries/quotations";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiTile } from "@/components/layout/kpi-tile";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,13 +12,21 @@ export const metadata = { title: "Dashboard · DealFlow360" };
 export default async function DashboardPage() {
   const user = await requireInternal();
 
-  const [quotations, customers, products, queuedEmails, pendingUsers] = await Promise.all([
-    prisma.quotation.count(),
-    prisma.customer.count({ where: { isActive: true } }),
-    prisma.product.count({ where: { status: "ACTIVE" } }),
-    prisma.emailMessage.count({ where: { status: "QUEUED" } }),
-    prisma.user.count({ where: { role: "PENDING" } }),
-  ]);
+  const [quotations, customers, products, queuedEmails, pendingUsers, atRisk] =
+    await Promise.all([
+      prisma.quotation.count({ where: quotationScope(user) }),
+      prisma.customer.count({ where: { isActive: true } }),
+      prisma.product.count({ where: { status: "ACTIVE" } }),
+      prisma.emailMessage.count({ where: { status: "QUEUED" } }),
+      user.role === "ADMIN"
+        ? prisma.user.count({ where: { role: "PENDING" } })
+        : Promise.resolve(0),
+      ["ADMIN", "SALES_MANAGER", "FINANCE"].includes(user.role)
+        ? prisma.dealHealthAlert.count({
+            where: { status: { not: "RESOLVED" } },
+          })
+        : Promise.resolve(0),
+    ]);
 
   return (
     <>
@@ -26,9 +36,21 @@ export default async function DashboardPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile label="Quotations" value={quotations} icon={<FileText className="size-5" weight="duotone" />} />
-        <KpiTile label="Active customers" value={customers} icon={<Users className="size-5" weight="duotone" />} />
-        <KpiTile label="Active products" value={products} icon={<Package className="size-5" weight="duotone" />} />
+        <KpiTile
+          label="Quotations"
+          value={quotations}
+          icon={<FileText className="size-5" weight="duotone" />}
+        />
+        <KpiTile
+          label="Active customers"
+          value={customers}
+          icon={<Users className="size-5" weight="duotone" />}
+        />
+        <KpiTile
+          label="Active products"
+          value={products}
+          icon={<Package className="size-5" weight="duotone" />}
+        />
         <KpiTile
           label="Queued emails"
           value={queuedEmails}
@@ -42,25 +64,36 @@ export default async function DashboardPage() {
           <CardContent className="flex items-center justify-between gap-4 p-5">
             <div>
               <p className="font-medium">
-                {pendingUsers} account{pendingUsers === 1 ? "" : "s"} waiting for a role
+                {pendingUsers} account{pendingUsers === 1 ? "" : "s"} waiting
+                for a role
               </p>
               <p className="text-muted-foreground text-sm">
                 New signups cannot sign in until an admin assigns their role.
               </p>
             </div>
-            <a href="/admin/users?role=PENDING" className="text-primary-700 text-sm font-medium hover:underline">
+            <a
+              href="/admin/users?role=PENDING"
+              className="text-primary-700 text-sm font-medium hover:underline"
+            >
               Review in Admin →
             </a>
           </CardContent>
         </Card>
       ) : null}
 
-      <Card className="shadow-none">
-        <CardContent className="text-muted-foreground p-6 text-sm">
-          Quotation pipeline, approval queue and deal-health widgets arrive with phases 04–10. The
-          catalogue, customers, warehouses and stock are already live under Admin.
-        </CardContent>
-      </Card>
+      {["ADMIN", "SALES_MANAGER", "FINANCE"].includes(user.role) && (
+        <Link
+          href="/deal-health"
+          className="block rounded-xl border p-6 transition-colors hover:bg-muted/40"
+        >
+          <h2 className="font-semibold">At-risk deals</h2>
+          <p className="mt-2 text-3xl font-semibold">{atRisk}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Review stalled deals, discount anomalies, delivery risks and overdue
+            approvals.
+          </p>
+        </Link>
+      )}
     </>
   );
 }

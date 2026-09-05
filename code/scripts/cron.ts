@@ -4,7 +4,7 @@ const secret = process.env.JOBS_SECRET;
 if (!secret) throw new Error("JOBS_SECRET is required to run local jobs.");
 
 async function tick() {
-  for (const job of ["billing", "emails"]) {
+  for (const job of ["billing", "deal-health", "emails"]) {
     try {
       const response = await fetch(new URL(`/api/jobs/${job}`, origin), {
         method: "POST",

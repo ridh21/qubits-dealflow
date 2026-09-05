@@ -1,3 +1,4 @@
+import { emit } from "@/server/events";
 import { createOrderFromQuotation } from "./order.service";
 import { Prisma } from "@prisma/client";
 import { withTx, type Tx } from "@/server/db";
@@ -155,6 +156,9 @@ export async function submitForApproval(
   return withTx(async (tx) => {
     await lockedQuote(tx, id, expectedVersion);
     return evaluateAndRoute(tx, actor, id, "SUBMIT");
+  }).then(async (result) => {
+    await emit("quotation.activity", { quotationId: id });
+    return result;
   });
 }
 export async function withdraw(

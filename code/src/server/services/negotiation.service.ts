@@ -1,3 +1,4 @@
+import { emit } from "@/server/events";
 import { z } from "zod";
 import { withTx, type Tx } from "@/server/db";
 import type { SessionUser } from "@/server/auth/guards";
@@ -280,6 +281,9 @@ export async function submitProposals(
       ).status,
       appliedAsRevision: policy.payload.autoApplyCustomerProposals,
     };
+  }).then(async (result) => {
+    await emit("quotation.activity", { quotationId: id });
+    return result;
   });
 }
 export async function acceptQuotation(
