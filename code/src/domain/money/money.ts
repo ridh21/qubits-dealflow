@@ -1,3 +1,5 @@
+import Decimal from "decimal.js";
+
 /**
  * Money is always integer minor units (cents). Percentages are basis points:
  * 1250 bp = 12.50 %. Nothing in the app stores a float amount.
@@ -5,7 +7,7 @@
 export const BP_SCALE = 10_000;
 
 export function pctOf(amountMinor: number, bp: number): number {
-  return Math.round((amountMinor * bp) / BP_SCALE);
+  return new Decimal(amountMinor).mul(bp).div(BP_SCALE).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
 }
 
 export function applyDiscount(amountMinor: number, bp: number): number {
@@ -14,7 +16,7 @@ export function applyDiscount(amountMinor: number, bp: number): number {
 
 export function ratioBp(partMinor: number, wholeMinor: number): number {
   if (wholeMinor === 0) return 0;
-  return Math.round((partMinor * BP_SCALE) / wholeMinor);
+  return new Decimal(partMinor).mul(BP_SCALE).div(wholeMinor).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
 }
 
 export function sum(values: number[]): number {
@@ -38,13 +40,13 @@ export function allocateProportional(totalMinor: number, weights: number[]): num
     return out;
   }
 
-  const exact = weights.map((w) => (totalMinor * w) / totalWeight);
-  const floors = exact.map((v) => Math.floor(v));
+  const exact = weights.map((w) => new Decimal(totalMinor).mul(w).div(totalWeight));
+  const floors = exact.map((v) => v.floor().toNumber());
   let remainder = totalMinor - sum(floors);
 
   const order = exact
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => (b.frac === a.frac ? a.i - b.i : b.frac - a.frac));
+    .map((v, i) => ({ i, frac: v.minus(v.floor()) }))
+    .sort((a, b) => (b.frac.eq(a.frac) ? a.i - b.i : b.frac.cmp(a.frac)));
 
   const out = [...floors];
   for (let k = 0; remainder > 0 && k < order.length; k++, remainder--) {
