@@ -3,6 +3,7 @@
  * committed, so a handler never observes a row that later rolls back.
  */
 export interface AppEvents {
+  "quotation.activity": { quotationId: string };
   "quotation.submitted": { quotationId: string; version: number };
   "quotation.approved": { quotationId: string; version: number };
   "quotation.rejected": { quotationId: string; version: number };
@@ -26,7 +27,9 @@ export interface AppEvents {
   "user.approved": { userId: string; role: string };
 }
 
-type Handler<K extends keyof AppEvents> = (payload: AppEvents[K]) => void | Promise<void>;
+type Handler<K extends keyof AppEvents> = (
+  payload: AppEvents[K],
+) => void | Promise<void>;
 
 const handlers = new Map<keyof AppEvents, Set<Handler<never>>>();
 
@@ -37,7 +40,10 @@ export function on<K extends keyof AppEvents>(event: K, handler: Handler<K>) {
   return () => set.delete(handler as Handler<never>);
 }
 
-export async function emit<K extends keyof AppEvents>(event: K, payload: AppEvents[K]) {
+export async function emit<K extends keyof AppEvents>(
+  event: K,
+  payload: AppEvents[K],
+) {
   const set = handlers.get(event);
   if (!set?.size) return;
   for (const h of set) {

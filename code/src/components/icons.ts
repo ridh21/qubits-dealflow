@@ -49,3 +49,5 @@ export {
   WarningCircle,
   X,
 } from "@phosphor-icons/react/dist/ssr";
+
+export { PauseIcon as Pause, PlayIcon as Play } from "@phosphor-icons/react/dist/ssr";

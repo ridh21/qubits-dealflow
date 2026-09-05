@@ -962,6 +962,7 @@ model CreditNote {
   subscriptionId  String?
   subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
   sourceInvoiceId String?
+  currency        String
   amountMinor     Int
   remainingMinor  Int
   refundDueMinor  Int           @default(0)
@@ -970,6 +971,8 @@ model CreditNote {
   createdById     String?
   createdAt       DateTime      @default(now())
   applications    CreditApplication[]
+
+  @@index([customerId, currency, createdAt, id])
 }
 
 model CreditApplication {

@@ -1,9 +1,15 @@
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/server/db";
+import { consumePortalToken } from "./consume-portal-token";
 import { verifyPassword } from "./password";
 
-export const INTERNAL_ROLES = ["ADMIN", "SALES_REP", "SALES_MANAGER", "FINANCE"] as const;
+export const INTERNAL_ROLES = [
+  "ADMIN",
+  "SALES_REP",
+  "SALES_MANAGER",
+  "FINANCE",
+] as const;
 export type InternalRole = (typeof INTERNAL_ROLES)[number];
 
 const EIGHT_HOURS = 60 * 60 * 8;
@@ -20,7 +26,10 @@ export function buildAuthConfig(kind: "internal" | "portal"): NextAuthConfig {
     trustHost: true,
     basePath: isPortal ? "/api/portal-auth" : "/api/auth",
     secret: process.env.AUTH_SECRET,
-    session: { strategy: "jwt", maxAge: isPortal ? TWENTY_FOUR_HOURS : EIGHT_HOURS },
+    session: {
+      strategy: "jwt",
+      maxAge: isPortal ? TWENTY_FOUR_HOURS : EIGHT_HOURS,
+    },
     pages: { signIn: isPortal ? "/portal/login" : "/login" },
     cookies: {
       sessionToken: {
@@ -43,17 +52,14 @@ export function buildAuthConfig(kind: "internal" | "portal"): NextAuthConfig {
               const token = typeof raw?.token === "string" ? raw.token : null;
               if (!token) return null;
 
-              const record = await prisma.verificationToken.findUnique({ where: { token } });
-              if (!record || record.purpose !== "PORTAL_LOGIN" || record.expires < new Date()) {
-                return null;
-              }
-              // Single use.
-              await prisma.verificationToken.deleteMany({ where: { token } });
+              const email = await consumePortalToken(token);
+              if (!email) return null;
 
               const user = await prisma.user.findUnique({
-                where: { email: record.identifier },
+                where: { email },
               });
-              if (!user || user.role !== "CUSTOMER" || !user.isActive) return null;
+              if (!user || user.role !== "CUSTOMER" || !user.isActive)
+                return null;
 
               await prisma.user.update({
                 where: { id: user.id },
@@ -79,13 +85,18 @@ export function buildAuthConfig(kind: "internal" | "portal"): NextAuthConfig {
               password: { label: "Password", type: "password" },
             },
             async authorize(raw) {
-              const email = typeof raw?.email === "string" ? raw.email.toLowerCase().trim() : null;
-              const password = typeof raw?.password === "string" ? raw.password : null;
+              const email =
+                typeof raw?.email === "string"
+                  ? raw.email.toLowerCase().trim()
+                  : null;
+              const password =
+                typeof raw?.password === "string" ? raw.password : null;
               if (!email || !password) return null;
 
               const user = await prisma.user.findUnique({ where: { email } });
               if (!user?.passwordHash) return null;
-              if (!(await verifyPassword(password, user.passwordHash))) return null;
+              if (!(await verifyPassword(password, user.passwordHash)))
+                return null;
               if (user.role === "PENDING" || !user.isActive) {
                 throw new Error("Account awaiting admin approval");
               }
@@ -112,7 +123,8 @@ export function buildAuthConfig(kind: "internal" | "portal"): NextAuthConfig {
           token.uid = user.id;
           token.role = (user as { role?: string }).role;
           token.teamId = (user as { teamId?: string | null }).teamId ?? null;
-          token.customerId = (user as { customerId?: string | null }).customerId ?? null;
+          token.customerId =
+            (user as { customerId?: string | null }).customerId ?? null;
         }
         return token;
       },

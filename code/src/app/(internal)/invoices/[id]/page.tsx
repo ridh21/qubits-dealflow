@@ -1,3 +1,6 @@
+import { WorkspaceActions } from "@/components/layout/workspace-actions";
+import { Button } from "@/components/ui/button";
+import { FileText } from "@/components/icons";
 import { getInvoice } from "@/server/queries/invoices";
 import { PageHeader } from "@/components/layout/page-header";
 import { formatMinor } from "@/domain/money/money";
@@ -18,6 +21,14 @@ export default async function InvoicePage({
   const { actor, invoice: i } = await getInvoice((await params).id);
   return (
     <>
+      <WorkspaceActions>
+        <Button variant="outline" asChild>
+          <a href={`/api/export/invoice/${i.id}/pdf`}>
+            <FileText />
+            Download summary
+          </a>
+        </Button>
+      </WorkspaceActions>
       <PageHeader
         title={i.number}
         description={`${i.customer.name} · ${i.type} · ${i.paymentStatus.replaceAll("_", " ")}`}

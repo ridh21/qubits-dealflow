@@ -1,3 +1,4 @@
+import { emit } from "@/server/events";
 import { Prisma, type Quotation } from "@prisma/client";
 import type { z } from "zod";
 import { withTx, lockRow, type Tx } from "@/server/db";
@@ -427,7 +428,7 @@ export async function createRevision(
   raw: z.infer<typeof QuoteReasonInput>,
 ) {
   const input = QuoteReasonInput.parse(raw);
-  return withTx(async (tx) =>
+  const result = await withTx(async (tx) =>
     reviseInTx(
       tx,
       actor,
@@ -435,6 +436,8 @@ export async function createRevision(
       input.reason,
     ),
   );
+  await emit("quotation.activity", { quotationId: input.id });
+  return result;
 }
 export async function cancelQuotation(
   actor: SessionUser,

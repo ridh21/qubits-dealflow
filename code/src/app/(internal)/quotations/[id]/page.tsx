@@ -1,3 +1,4 @@
+import { CustomerProposals } from "../_components/customer-proposals";
 import { suggestionsFor } from "@/server/services/upsell.service";
 import { UpsellPanel } from "../_components/upsell-panel";
 import { getQuotation, quotationCatalogue } from "@/server/queries/quotations";
@@ -21,6 +22,13 @@ export default async function QuotationPage({
         description="Quotation workspace"
       />
       <QuoteBuilder key={data.quote.version} data={data} products={products} />
+      <CustomerProposals
+        id={id}
+        version={data.quote.version}
+        status={data.quote.status}
+        messages={data.quote.messages}
+        canRespond={data.actor.role !== "FINANCE"}
+      />
       {["DRAFT", "REVISION_REQUESTED"].includes(data.quote.status) &&
         data.actor.role !== "FINANCE" && (
           <UpsellPanel
