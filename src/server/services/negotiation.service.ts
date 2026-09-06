@@ -11,7 +11,7 @@ import {
 import { evaluateAndRoute } from "./approval.service";
 import { getActivePolicy } from "./policy.service";
 import { createOrderFromQuotation } from "./order.service";
-import { notifyUser } from "./notification.service";
+import { notifyRole, notifyUser } from "./notification.service";
 import { writeAudit } from "@/server/audit";
 
 export const ProposalInput = z.object({
@@ -344,8 +344,30 @@ export async function acceptQuotation(
       version,
       after: { ip: ip ?? null },
     });
-    if (quote.approvedVersion !== version)
+    if (quote.approvedVersion !== version) {
+      // The customer is now waiting on us, and nothing else in the system says
+      // so: the acceptance is a row nobody is subscribed to. Without this the
+      // quote sits until a reviewer happens to open the approvals list, which
+      // reads to both sides as the acceptance having done nothing.
+      const pending = await tx.approvalStep.findFirst({
+        where: {
+          status: "PENDING",
+          request: { quotationId: id, quotationVersion: version, status: "PENDING" },
+        },
+        select: { role: true, requestId: true },
+      });
+      const notice = {
+        type: "QUOTATION_ACCEPTED" as const,
+        title: `${quote.number} accepted by the customer`,
+        body: pending
+          ? "The customer has accepted. Approving the remaining step will confirm the order immediately."
+          : "The customer has accepted and is waiting on internal approval.",
+        href: pending ? `/approvals/${pending.requestId}` : `/quotations/${id}`,
+      };
+      if (pending) await notifyRole(tx, pending.role, notice, actor.id);
+      await notifyUser(tx, quote.ownerId, notice);
       return { outcome: "PENDING_INTERNAL_APPROVAL" as const };
+    }
     const order = await createOrderFromQuotation(tx, id, version, actor);
     return { outcome: "ORDER_CREATED" as const, orderId: order.id };
   });

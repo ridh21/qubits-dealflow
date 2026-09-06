@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CustomerProposals } from "../_components/customer-proposals";
 import { suggestionsFor } from "@/server/services/upsell.service";
 import { UpsellPanel } from "../_components/upsell-panel";
@@ -27,6 +28,20 @@ export default async function QuotationPage({
         title={`${data.quote.number} · v${data.quote.version}`}
         description="Quotation workspace"
       />
+      {/* Once confirmed, the quotation's remaining life happens on the order.
+          Without this there was no path from here to fulfillment, and the order
+          looked as though it had never been created. */}
+      {data.quote.order && (
+        <div className="border-primary/30 bg-primary-50 text-primary-700 flex flex-wrap items-center gap-x-2 rounded-xl border px-4 py-3 text-sm">
+          <span>Confirmed as order {data.quote.order.number}.</span>
+          <Link
+            className="font-medium underline"
+            href={`/fulfillment/${data.quote.order.id}`}
+          >
+            Open in fulfillment
+          </Link>
+        </div>
+      )}
       {/* Keyed on the version so a new revision remounts the editor and drops
           local draft state. Siblings need distinct keys, hence the prefixes. */}
       <QuoteBuilder

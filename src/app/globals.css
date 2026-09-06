@@ -73,6 +73,11 @@
   --primary-600: oklch(0.64 0.19 42);
   --primary-700: oklch(0.56 0.17 40);
 
+  /* Dot-matrix loader "solid-theme" preset (src/lib/dotmatrix-core.tsx
+     resolves its fill to this variable; without it the dots fall back to the
+     inherited text colour instead of the brand orange). */
+  --color-dot-on: var(--primary);
+
   --secondary: oklch(0.96 0.01 70);
   --secondary-foreground: oklch(0.28 0.02 55);
   --muted: oklch(0.975 0.005 75);

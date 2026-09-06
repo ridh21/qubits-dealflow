@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { PaperPlaneTilt } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-/** The whole assistant: a question in, an answer and its SQL back. */
+/** The whole assistant: a question in, an answer back. */
 
 const SUGGESTIONS = [
   "How many quotations are pending approval?",
@@ -19,8 +19,6 @@ interface Turn {
   id: string;
   role: "user" | "assistant";
   text: string;
-  /** The SELECTs behind an answer, revealed on demand. */
-  sql?: string[];
 }
 
 let counter = 0;
@@ -55,7 +53,6 @@ export function AssistantChat() {
       });
       const data = (await response.json()) as {
         answer?: string;
-        sql?: string[];
         error?: string;
       };
       setTurns((current) => [
@@ -67,7 +64,6 @@ export function AssistantChat() {
             data.answer ??
             data.error ??
             "I could not answer that one — try rephrasing it.",
-          sql: data.sql,
         },
       ]);
     } catch {
@@ -85,9 +81,11 @@ export function AssistantChat() {
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-col">
-      <ScrollArea className="min-h-0 flex-1 px-4">
-        <div className="space-y-3 py-4">
+    // flex-1 pins the input bar to the bottom of the panel and lets the
+    // message list actually scroll instead of stretching the panel.
+    <div className="flex min-h-0 w-full flex-1 flex-col">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-3 px-4 pt-4 pb-5">
           {turns.length === 0 && (
             <div className="space-y-3">
               <p className="text-muted-foreground text-sm">
@@ -125,16 +123,6 @@ export function AssistantChat() {
                 )}
               >
                 <p className="whitespace-pre-wrap">{turn.text}</p>
-                {turn.sql && turn.sql.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="text-muted-foreground cursor-pointer text-xs">
-                      Show the query
-                    </summary>
-                    <pre className="text-muted-foreground mt-1 overflow-x-auto text-[11px] leading-relaxed">
-                      {turn.sql.join(";\n\n")}
-                    </pre>
-                  </details>
-                )}
               </div>
             </div>
           ))}
@@ -149,25 +137,30 @@ export function AssistantChat() {
       </ScrollArea>
 
       <form
-        className="flex items-center gap-2 border-t p-3"
+        className="flex items-end gap-2 border-t p-3"
         onSubmit={(event) => {
           event.preventDefault();
           void submit(draft);
         }}
       >
-        <Input
+        {/* Enter drops a line (default textarea behaviour); only the button
+            sends, so multi-line questions stay multi-line. */}
+        <Textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Ask a question…"
           aria-label="Ask the assistant a question"
           maxLength={500}
           disabled={pending}
+          rows={1}
+          className="max-h-32 min-h-10 resize-none overflow-y-auto py-2"
         />
         <Button
           type="submit"
           size="icon"
           disabled={pending || draft.trim().length === 0}
           aria-label="Send"
+          className="mb-0.5 shrink-0"
         >
           <PaperPlaneTilt className="size-4" />
         </Button>

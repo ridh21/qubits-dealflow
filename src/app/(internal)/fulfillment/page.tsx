@@ -19,6 +19,13 @@ export default async function FulfillmentPage({
 
   const columns: Column<Row>[] = [
     { key: "number", header: "Order", sortable: true, cell: (o) => o.number },
+    {
+      key: "quotation",
+      header: "From quotation",
+      cell: (o) => (
+        <span className="text-muted-foreground">{o.quotation.number}</span>
+      ),
+    },
     { key: "customer", header: "Customer", cell: (o) => o.customer.name },
     {
       key: "fulfillmentStatus",
@@ -28,7 +35,8 @@ export default async function FulfillmentPage({
     },
     {
       key: "status",
-      header: "Order",
+      // Was also headed "Order", which read as a duplicate of the number column.
+      header: "Order status",
       cell: (o) => <StatusBadge value={o.status} />,
     },
     {
@@ -61,7 +69,7 @@ export default async function FulfillmentPage({
       />
 
       <FiltersBar>
-        <SearchInput placeholder="Search order or customer…" />
+        <SearchInput placeholder="Search order, quotation or customer…" />
         <SelectFilter
           param="fulfillmentStatus"
           label="Fulfillment"

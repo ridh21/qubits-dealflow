@@ -38,6 +38,9 @@ export async function listFulfillment(sp: SearchParamsRecord) {
           OR: [
             { number: { contains: p.q, mode: "insensitive" } },
             { customer: { name: { contains: p.q, mode: "insensitive" } } },
+            // People arrive here holding a quotation number, having just
+            // confirmed it. Without this the order looks absent.
+            { quotation: { number: { contains: p.q, mode: "insensitive" } } },
           ],
         }
       : {}),
@@ -58,7 +61,11 @@ export async function listFulfillment(sp: SearchParamsRecord) {
         orderBy,
         skip,
         take,
-        include: { customer: { select: { name: true } }, lines: true },
+        include: {
+          customer: { select: { name: true } },
+          quotation: { select: { id: true, number: true } },
+          lines: true,
+        },
       }),
     p,
   );

@@ -44,7 +44,7 @@ export function AssistantWidget() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">Assistant</p>
               <p className="text-muted-foreground truncate text-xs">
-                Read-only — it looks things up, never changes them
+                Read-only
               </p>
             </div>
             <Button

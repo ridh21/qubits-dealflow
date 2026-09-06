@@ -31,9 +31,10 @@ Font.register({
   ],
 });
 
-export const dateLong = (d: Date) =>
+export const dateLong = (d: Date, timeZone?: string) =>
   new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
     month: "long",
     year: "numeric",
+    ...(timeZone ? { timeZone } : {}),
   }).format(d);

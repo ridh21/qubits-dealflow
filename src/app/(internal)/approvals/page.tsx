@@ -6,6 +6,11 @@ import { SearchInput } from "@/components/filters/search-input";
 import { SelectFilter } from "@/components/filters/select-filter";
 import { StatusBadge } from "@/components/layout/status-badge";
 import { ShieldCheck } from "@/components/icons";
+import {
+  reviewerState,
+  reviewerStateLabel,
+} from "@/domain/approval/reviewer-state";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Approvals · DealFlow360" };
 
@@ -15,7 +20,8 @@ export default async function ApprovalsPage({
   searchParams,
 }: PageProps<"/approvals">) {
   const sp = await searchParams;
-  const { rows, total, page, pageSize, pageCount } = await listApprovals(sp);
+  const { rows, total, page, pageSize, pageCount, actor } =
+    await listApprovals(sp);
 
   const columns: Column<Row>[] = [
     {
@@ -42,13 +48,25 @@ export default async function ApprovalsPage({
     },
     {
       key: "reviewer",
-      header: "Current reviewer",
+      header: "Waiting on",
       cell: (r) => {
-        const current = r.steps.find((s) => s.status === "PENDING");
-        return current ? (
-          current.role.replaceAll("_", " ").toLowerCase()
-        ) : (
-          <span className="text-muted-foreground">Complete</span>
+        const state = reviewerState({
+          pendingRole:
+            r.steps.find((s) => s.status === "PENDING")?.role ?? null,
+          requestVersion: r.quotationVersion,
+          quotationVersion: r.quotation.version,
+          actor,
+        });
+        return (
+          <span
+            className={cn(
+              state.kind === "NEEDS_YOU" && "text-primary-700 font-medium",
+              (state.kind === "COMPLETE" || state.kind === "SUPERSEDED") &&
+                "text-muted-foreground",
+            )}
+          >
+            {reviewerStateLabel(state)}
+          </span>
         );
       },
     },

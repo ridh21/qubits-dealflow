@@ -194,6 +194,7 @@ export async function invoicePdf(invoice: InvoiceDocumentData) {
 
           <View style={s.header}>
             <View style={s.brandWrap}>
+              {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image is a PDF primitive, not an <img> */}
               <Image src={LOGO_PATH} style={s.logo} />
               <View>
                 <Text style={s.brandName}>DealFlow360</Text>
@@ -237,7 +238,7 @@ export async function invoicePdf(invoice: InvoiceDocumentData) {
                 <Text style={s.cTotal}>Total</Text>
               </View>
               {invoice.lines.map((l, index) => (
-                <View key={l.id} style={[s.tableRow, index % 2 === 1 && s.tableRowAlt]} wrap={false}>
+                <View key={l.id} style={[s.tableRow, index % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}>
                   <Text style={s.cDescription}>{l.description}</Text>
                   <Text style={s.cQty}>{l.qty}</Text>
                   <Text style={s.cNet}>{money(l.amountMinor)}</Text>

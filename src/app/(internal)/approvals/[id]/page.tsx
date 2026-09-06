@@ -22,18 +22,20 @@ export default async function ApprovalPage({
       request: r,
       policy,
       audits,
+      customerAccepted,
+      routedReviewers,
+      adminsAvailable,
     } = await getApproval((await params).id),
     step = r.steps.find((s) => s.status === "PENDING");
+  // Owning the quotation is no longer a bar: the routed role is the control.
   const disabledReason =
-    actor.id === r.quotation.ownerId
-      ? "You cannot approve your own quotation."
-      : r.quotationVersion !== r.quotation.version
-        ? "This version has been superseded."
-        : !step
-          ? "This review is complete."
-          : actor.role !== "ADMIN" && actor.role !== step.role
-            ? `Waiting for ${step.role.replaceAll("_", " ").toLowerCase()}.`
-            : undefined;
+    r.quotationVersion !== r.quotation.version
+      ? "This version has been superseded."
+      : !step
+        ? "This review is complete."
+        : actor.role !== "ADMIN" && actor.role !== step.role
+          ? `Waiting for ${step.role.replaceAll("_", " ").toLowerCase()}.`
+          : undefined;
   const buckets = r.metrics as unknown as RiskBucket[];
   return (
     <>
@@ -45,7 +47,28 @@ export default async function ApprovalPage({
         stepId={step?.id}
         version={r.quotationVersion}
         disabledReason={disabledReason}
+        stepNumber={step ? step.index + 1 : undefined}
+        totalSteps={r.steps.length}
+        customerAccepted={customerAccepted}
       />
+      {step && routedReviewers === 0 && adminsAvailable === 0 && (
+        <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-xl border px-4 py-3 text-sm">
+          Nobody can action this step. It is routed to{" "}
+          {step.role.replaceAll("_", " ").toLowerCase()}, and the only holders of
+          that role either own this quotation or are deactivated. Assign another{" "}
+          {step.role.replaceAll("_", " ").toLowerCase()}, or reassign the
+          quotation owner, to unblock it.
+        </div>
+      )}
+      {customerAccepted && r.status === "PENDING" && (
+        <div className="border-primary/30 bg-primary-50 text-primary-700 rounded-xl border px-4 py-3 text-sm">
+          The customer has already accepted v{r.quotationVersion}. Clearing the
+          remaining {r.steps.filter((s) => s.status !== "APPROVED").length === 1
+            ? "step"
+            : "steps"}{" "}
+          confirms the order immediately.
+        </div>
+      )}
       <div className="flex gap-6 text-sm">
         <Link className="underline" href={`/quotations/${r.quotationId}`}>
           View quotation
@@ -59,7 +82,9 @@ export default async function ApprovalPage({
         <ol className="space-y-3">
           {r.steps.map((s) => (
             <li key={s.id}>
-              {s.index + 1}. {s.role.replaceAll("_", " ")} · {s.status}
+              {s.index + 1} of {r.steps.length}.{" "}
+              {s.role.replaceAll("_", " ")} · {s.status}
+              {s.status === "PENDING" && " — awaiting decision"}
               {s.note && (
                 <p className="text-sm text-muted-foreground">{s.note}</p>
               )}
