@@ -19,6 +19,10 @@ services:
       # Inside the network the assistant reaches Postgres by service name, and
       # always as the SELECT-only role — never as the application role.
       ASSISTANT_DATABASE_URL: postgresql://dealflow_readonly:${ASSISTANT_DB_PASSWORD:-dealflow_readonly}@db:5432/${POSTGRES_DB:-dealflow_dev}
+      # The container's localhost is itself, not the Mac — host.docker.internal
+      # is how it reaches the LLM gateway running on the host. (.env keeps the
+      # plain localhost URL, which is what a local `uv run` needs.)
+      LLM_BASE_URL: http://host.docker.internal:20128/v1
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

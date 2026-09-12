@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PaperPlaneTilt } from "@/components/icons";
+import { LoadingState } from "@/components/spectrumui/blocks/ai-assistants/loading-state";
+import { AssistantMarkdown } from "./assistant-markdown";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -122,15 +124,19 @@ export function AssistantChat() {
                     : "bg-muted",
                 )}
               >
-                <p className="whitespace-pre-wrap">{turn.text}</p>
+                {turn.role === "assistant" ? (
+                  <AssistantMarkdown text={turn.text} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{turn.text}</p>
+                )}
               </div>
             </div>
           ))}
 
           {pending && (
-            <p className="text-muted-foreground text-sm" aria-live="polite">
-              Looking that up…
-            </p>
+            <div aria-live="polite">
+              <LoadingState label="Looking that up" />
+            </div>
           )}
           <div ref={bottomRef} />
         </div>

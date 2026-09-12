@@ -21,14 +21,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://dealflow:dealflow_dev@127.0.0.1:55432/dealflow_dev"
 
     # ── LLM (any OpenAI-compatible endpoint) ────────────────────────────────
-    llm_base_url: str = "https://chat-api.hetsaraiya.com/v1"
+    llm_base_url: str = "http://localhost:20128/v1"
     llm_api_key: str = ""
-    llm_model: str = "gpt-5.5"
+    llm_model: str = "ag/claude-sonnet-4-6"
     # This gateway fronts several upstream providers, and a model stops working
     # the moment its provider's daily quota is spent — sometimes while still
     # advertised in /v1/models. Requests fall back down this list on 429/503, so
     # one exhausted provider degrades the answer instead of breaking it.
-    llm_fallback_models: str = "gpt-5.4-mini,xai/grok-4.6,opencode-go/deepseek-v4-flash"
+    llm_fallback_models: str = ""
     # A short per-attempt timeout with few retries fails in ~40s total rather
     # than hanging past the browser's 45s abort.
     llm_timeout: int = 20
