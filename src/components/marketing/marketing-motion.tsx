@@ -28,7 +28,6 @@ export function MarketingMotion({ children }: { children: ReactNode }) {
     const targets: HTMLElement[] = [];
     for (const group of REVEAL_GROUPS) {
       root.querySelectorAll<HTMLElement>(group.selector).forEach((element, index) => {
-        if (element.dataset.reveal === "true") return;
         element.dataset.reveal = "true";
         element.style.setProperty(
           "--reveal-delay",
