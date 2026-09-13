@@ -74,9 +74,10 @@ export function MarketingMotion({ children }: { children: ReactNode }) {
     // Browsers can jump several viewports at once (PageDown, anchor links,
     // restored scroll position). IntersectionObserver is not guaranteed to
     // deliver an entry for every skipped section, so reveal anything still
-    // pending after the initial motion window. This keeps the page usable even
-    // when a user lands deep in the page or scrolls faster than the observer.
-    const revealFallback = window.setTimeout(revealAll, 1600);
+    // pending after a generous safety window. This keeps the page usable even
+    // when a user lands deep in the page or scrolls faster than the observer,
+    // while preserving scroll-triggered reveals during the initial visit.
+    const revealFallback = window.setTimeout(revealAll, 8000);
     // Hash navigation can move the viewport before the observer's first
     // delivery; this keeps anchored sections visible on the first frame.
     requestAnimationFrame(revealInViewport);
