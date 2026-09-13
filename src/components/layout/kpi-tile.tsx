@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function KpiTile({
@@ -23,17 +22,12 @@ export function KpiTile({
   }[tone];
 
   return (
-    <Card className="shadow-none">
-      <CardContent className="flex items-start justify-between gap-3 p-5">
-        <div className="space-y-1">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            {label}
-          </p>
-          <p className={cn("font-display tabular text-2xl font-semibold", toneClass)}>{value}</p>
-          {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
-        </div>
-        {icon ? <div className="text-muted-foreground/70">{icon}</div> : null}
-      </CardContent>
-    </Card>
+    <div className="kpi-tile min-w-0" data-tone={tone}>
+      <div className="kpi-label"><span>{label}</span>{icon ? <span aria-hidden="true" className="opacity-60 [&_svg]:size-4">{icon}</span> : null}</div>
+      <div className="kpi-value">
+        <p className={cn("font-display tabular", toneClass)}>{value}</p>
+        {hint ? <p>{hint}</p> : null}
+      </div>
+    </div>
   );
 }

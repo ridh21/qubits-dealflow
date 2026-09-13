@@ -5,8 +5,8 @@ type Tone = "neutral" | "info" | "success" | "warning" | "danger" | "primary";
 
 const TONE_CLASS: Record<Tone, string> = {
   neutral: "bg-muted text-muted-foreground border-transparent",
-  info: "bg-secondary text-secondary-foreground border-transparent",
-  success: "bg-success/12 text-success border-success/25",
+  info: "bg-lilac text-[#59419b] border-transparent",
+  success: "bg-mint text-success border-transparent",
   warning: "bg-warning/18 text-warning-foreground border-warning/35",
   danger: "bg-destructive/10 text-destructive border-destructive/25",
   primary: "bg-primary-50 text-primary-700 border-primary-100",

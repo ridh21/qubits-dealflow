@@ -24,7 +24,7 @@ export function FiltersBar({ children, actions }: { children: ReactNode; actions
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="filter-bar flex flex-wrap items-center gap-2">
       {children}
       {applied.length > 0 ? (
         <Button variant="ghost" size="sm" onClick={clearAll} className="text-muted-foreground">

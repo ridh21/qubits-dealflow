@@ -10,7 +10,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
-        <h1 className="font-display text-2xl font-semibold">Sign in</h1>
+        <p className="text-primary-700 mb-3 text-sm">Welcome back</p>
+        <h1 className="font-display text-2xl font-semibold">Log in to DealFlow360</h1>
         <p className="text-muted-foreground text-sm">
           Internal access for sales, finance and admin teams.
         </p>

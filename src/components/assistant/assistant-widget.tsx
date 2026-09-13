@@ -62,8 +62,8 @@ export function AssistantWidget() {
       )}
 
       <Button
-        size="lg"
-        className="size-13 rounded-full shadow-lg"
+        size="icon-lg"
+        className="assistant-launcher shadow-lg"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-label={open ? "Close assistant" : "Open assistant"}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { quotationPipeline } from "@/domain/quotation/list-params";
 import { formatMinor } from "@/domain/money/money";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/layout/status-badge";
 import type { listQuotations } from "@/server/queries/quotations";
 
 type Row = Awaited<ReturnType<typeof listQuotations>>["rows"][number];
@@ -24,10 +24,10 @@ export function QuotationListBoard({ rows }: { rows: Row[] }) {
           return (
             <section
               key={column.label}
-              className="min-w-64 flex-1 rounded-xl bg-muted p-4"
+              className="min-w-64 flex-1 rounded-2xl border border-border/60 bg-secondary/70 p-3"
               aria-label={column.label}
             >
-              <h2 className="mb-4 flex items-center justify-between gap-2 text-sm font-semibold">
+              <h2 className="mb-4 flex items-center justify-between gap-2 px-1 pt-1 text-sm font-medium">
                 {column.label}
                 <span className="text-xs font-normal text-muted-foreground">
                   {cards.length} on page
@@ -44,7 +44,7 @@ export function QuotationListBoard({ rows }: { rows: Row[] }) {
                     key={q.id}
                     draggable={false}
                     href={`/quotations/${q.id}`}
-                    className="block space-y-2 rounded-lg border bg-card p-4 focus-visible:outline-2 focus-visible:outline-ring"
+                    className="block space-y-3 rounded-xl border border-border/80 bg-card p-4 transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     <p className="font-medium">
                       {q.number} · v{q.version}
@@ -53,9 +53,7 @@ export function QuotationListBoard({ rows }: { rows: Row[] }) {
                     <p className="text-xs text-muted-foreground">
                       {q.owner.name} · {q.riskBand.toLowerCase()} risk
                     </p>
-                    <Badge variant="outline">
-                      {q.status.replaceAll("_", " ")}
-                    </Badge>
+                    <StatusBadge value={q.status} />
                     <p className="text-sm">
                       {formatMinor(q.totalMinor, q.currency)} initial total
                     </p>

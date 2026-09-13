@@ -27,7 +27,7 @@ export function Panel({
       className={cn(
         "flex flex-col rounded-2xl p-2 transition-colors",
         featured
-          ? "bg-primary shadow-primary/25 shadow-lg"
+          ? "bg-primary-100 border border-primary/20"
           : "bg-muted/70 border-border/70 border",
         className,
       )}
@@ -37,7 +37,7 @@ export function Panel({
           <p
             className={cn(
               "font-display text-base font-semibold",
-              featured ? "text-primary-foreground" : "text-foreground",
+              featured ? "text-primary-700" : "text-foreground",
             )}
           >
             {label}
@@ -46,7 +46,7 @@ export function Panel({
             <p
               className={cn(
                 "mt-1 text-[13px] leading-relaxed",
-                featured ? "text-primary-foreground/80" : "text-muted-foreground",
+                featured ? "text-primary-700" : "text-muted-foreground",
               )}
             >
               {description}
@@ -56,7 +56,7 @@ export function Panel({
         {badge}
       </div>
 
-      <div className="bg-card border-border/70 flex flex-1 flex-col rounded-xl border p-4 shadow-sm">
+      <div className="bg-card border-border/70 flex flex-1 flex-col rounded-xl border p-5">
         {children}
       </div>
     </div>

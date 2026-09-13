@@ -33,7 +33,7 @@ export function LoginForm({ next }: { next: string }) {
 
       <div className="space-y-2">
         <Label htmlFor="email">Work email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" required />
+        <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@company.com" required />
       </div>
 
       <div className="space-y-2">

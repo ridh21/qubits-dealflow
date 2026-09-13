@@ -1,11 +1,12 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import {
   logoutAction,
   portalLogoutAction,
 } from "@/server/actions/auth.actions";
 import { SignOut } from "@/components/icons";
+import { WorkspaceBreadcrumb } from "./workspace-breadcrumb";
 import {
   Sidebar,
   SidebarContent,
@@ -81,7 +82,7 @@ export function AppShell({
   return (
     <TooltipProvider>
       <WorkspaceActionsProvider>
-        <SidebarProvider>
+        <SidebarProvider className="workspace-shell" style={{ "--sidebar-width": "14rem" } as CSSProperties}>
           {/* "icon" rather than "offcanvas": collapsing on desktop should
               narrow the rail to icons, not hide navigation entirely. */}
           <Sidebar collapsible="icon" role="complementary" aria-label="Workspace sidebar">
@@ -117,36 +118,42 @@ export function AppShell({
               )}
             </SidebarContent>
             <SidebarFooter className="border-t p-3 group-data-[collapsible=icon]:p-1">
-              <div className="px-1 group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center gap-3 px-1 py-2 group-data-[collapsible=icon]:hidden">
+                <span className="bg-lilac grid size-9 shrink-0 place-items-center rounded-full text-xs font-medium text-[#59419b]" aria-hidden="true">
+                  {(user.name ?? user.email ?? "D").slice(0, 2).toUpperCase()}
+                </span>
+                <div className="min-w-0">
                 <p className="truncate text-sm font-medium">
                   {user.name ?? user.email}
                 </p>
                 <p className="text-muted-foreground text-xs capitalize">
                   {user.role?.replaceAll("_", " ").toLowerCase()}
                 </p>
+                </div>
               </div>
               <form action={portal ? portalLogoutAction : logoutAction}>
-                <SidebarMenuButton type="submit" tooltip="Sign out">
+                <SidebarMenuButton type="submit" tooltip="Sign out" className="signout-action">
                   <SignOut className="size-4" />
                   <span>Sign out</span>
                 </SidebarMenuButton>
               </form>
             </SidebarFooter>
           </Sidebar>
-          <SidebarInset className="min-w-0">
+          <SidebarInset className="min-w-0 bg-surface">
             {/* Single toolbar: the one nav toggle, and this page's actions. */}
-            <div className="bg-background/80 sticky top-0 z-20 flex min-h-13 flex-wrap items-center gap-2 border-b px-3 py-2 backdrop-blur sm:px-4">
+            <div className="bg-white sticky top-0 z-20 flex min-h-16 flex-wrap items-center gap-3 border-b px-4 py-3 sm:px-6">
               <SidebarTrigger aria-label="Toggle navigation" />
-              <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
+              <WorkspaceBreadcrumb portal={portal} />
+              <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
                 <WorkspaceActionsSlot />
               </div>
             </div>
-            <div className="mx-auto w-full max-w-[1440px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <main id="main-content" className="workspace-content mx-auto w-full max-w-[1440px] flex-1 space-y-6 px-4 py-7 sm:px-6 lg:px-8 lg:py-8">
               {children}
-            </div>
-            <footer className="text-muted-foreground border-t px-6 py-4 text-xs">
-              DealFlow360 · Quotation to payment, with every decision accounted
-              for.
+            </main>
+            <footer className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 px-6 py-5 text-[11px]">
+              <span>DealFlow360 · Every deal, connected.</span>
+              <span>{portal ? "Your customer workspace" : "Sales operations workspace"}</span>
             </footer>
           </SidebarInset>
         </SidebarProvider>

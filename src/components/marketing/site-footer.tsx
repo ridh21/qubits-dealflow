@@ -1,63 +1,17 @@
 import Link from "next/link";
 import { Section } from "./rails";
 import { Wordmark } from "./wordmark";
-
-const GROUPS = [
-  {
-    title: "Product",
-    links: [
-      { href: "#flow", label: "How it works" },
-      { href: "#pricing", label: "Pricing" },
-      { href: "#faq", label: "FAQ" },
-    ],
-  },
-  {
-    title: "Access",
-    links: [
-      { href: "/login", label: "Internal sign in" },
-      { href: "/portal/login", label: "Customer portal" },
-      { href: "/signup", label: "Request access" },
-    ],
-  },
-];
-
 export function SiteFooter() {
   return (
-    <Section ruled={false} innerClassName="py-14">
-      <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr]">
-        <div className="max-w-xs">
-          <Wordmark />
-          <p className="text-muted-foreground mt-4 text-[13px] leading-relaxed">
-            Quotation, approval, fulfillment and billing in one flow — with every
-            decision accounted for.
-          </p>
+    <footer>
+      <Section innerClassName="pb-8 pt-4">
+        <div className="landing-footer-top">
+          <div><Wordmark /><p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">One workspace for the path<br />from quotation to revenue.</p><p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground"><span className="size-1.5 rounded-full bg-success" /> Built for B2B teams</p></div>
+          <nav aria-label="Footer product navigation"><p>Product</p>{[["#product","Product"],["#features","Features"],["#flow","How it works"],["#pricing","Pricing"],["#faq","FAQ"]].map(([href,label])=><Link key={href} href={href}>{label}</Link>)}</nav>
+          <nav aria-label="Footer access navigation"><p>Workspace</p><Link href="/login">Team login</Link><Link href="/portal/login">Customer portal</Link><Link href="/signup">Request access</Link></nav>
         </div>
-
-        {GROUPS.map((group) => (
-          <div key={group.title}>
-            <p className="text-[11px] font-medium tracking-[0.14em] uppercase">
-              {group.title}
-            </p>
-            <ul className="mt-4 space-y-2.5">
-              {group.links.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <div className="border-border/70 text-muted-foreground mt-12 flex flex-col gap-2 border-t pt-6 text-xs sm:flex-row sm:items-center sm:justify-between">
-        <p>© {new Date().getFullYear()} DealFlow360. All rights reserved.</p>
-        <p>Built for Indian B2B desks — INR and GST throughout.</p>
-      </div>
-    </Section>
+        <div className="flex flex-wrap justify-between gap-3 border-t pt-6 text-xs text-muted-foreground"><p>© {new Date().getFullYear()} DealFlow360</p><p>Every deal, connected.</p></div>
+      </Section>
+    </footer>
   );
 }

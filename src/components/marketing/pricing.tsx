@@ -55,7 +55,7 @@ const PLANS = [
 export function Pricing() {
   return (
     <Section id="pricing" innerClassName="py-20">
-      <div className="mx-auto max-w-2xl text-center">
+      <div className="reveal-heading mx-auto max-w-2xl text-center">
         <Eyebrow>Pricing</Eyebrow>
         <h2 className="font-display mt-4 text-3xl font-semibold text-balance sm:text-4xl">
           Priced per desk, not per document
@@ -66,7 +66,7 @@ export function Pricing() {
         </p>
       </div>
 
-      <div className="mt-12 grid items-start gap-4 lg:grid-cols-3">
+      <div className="pricing-grid mt-12 grid items-start gap-4 lg:grid-cols-3">
         {PLANS.map((plan) => (
           <Panel
             key={plan.name}
@@ -75,7 +75,7 @@ export function Pricing() {
             featured={plan.featured}
             badge={
               plan.featured ? (
-                <span className="bg-primary-foreground/15 text-primary-foreground rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap">
+                <span className="bg-white text-primary-700 rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap">
                   Most chosen
                 </span>
               ) : undefined
@@ -115,7 +115,7 @@ export function Pricing() {
         ))}
       </div>
 
-      <p className="text-muted-foreground mt-6 text-center text-xs">
+      <p className="text-muted-foreground mt-10 text-center text-xs">
         Prices in INR, exclusive of GST. Customer portal seats are unlimited on every plan.
       </p>
     </Section>

@@ -31,26 +31,25 @@ const QUESTIONS = [
 
 export function Faq() {
   return (
-    <Section id="faq" innerClassName="py-20">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,20rem)_1fr] lg:gap-16">
-        <div>
+    <Section id="faq" innerClassName="landing-section-space">
+      <div className="mx-auto max-w-2xl">
+        <div className="reveal-heading mb-10 text-center">
           <Eyebrow>Questions</Eyebrow>
           <h2 className="font-display mt-4 text-3xl font-semibold text-balance sm:text-4xl">
-            The things teams ask first
+            Questions, answered.
           </h2>
           <p className="text-muted-foreground mt-4 text-[15px] leading-relaxed text-pretty">
-            Still unsure whether it fits how your desk works? Ask for access and we
-            will walk a real deal through it with you.
+            A few things to know before your first deal.
           </p>
         </div>
 
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion type="single" collapsible defaultValue={QUESTIONS[0].q} className="w-full space-y-3">
           {QUESTIONS.map((item) => (
-            <AccordionItem key={item.q} value={item.q}>
-              <AccordionTrigger className="text-start text-[15px] font-medium">
+            <AccordionItem key={item.q} value={item.q} className="rounded-2xl border bg-surface px-5 last:border-b">
+              <AccordionTrigger className="py-5 text-start text-[15px] font-medium">
                 {item.q}
               </AccordionTrigger>
-              <AccordionContent className="text-muted-foreground text-sm leading-relaxed">
+              <AccordionContent className="text-muted-foreground pb-5 text-sm leading-relaxed">
                 {item.a}
               </AccordionContent>
             </AccordionItem>

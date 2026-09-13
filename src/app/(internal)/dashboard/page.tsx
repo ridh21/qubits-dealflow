@@ -1,12 +1,9 @@
 import Link from "next/link";
 import {
-  ChartBar,
   CheckCircle,
   Clock,
   FileText,
-  Plus,
   Receipt,
-  Users,
   Warning,
 } from "@phosphor-icons/react/dist/ssr";
 import {
@@ -19,7 +16,7 @@ import { WorkspaceActions } from "@/components/layout/workspace-actions";
 import { Money } from "@/components/layout/money";
 import { formatDateTimeIST, formatDateIST } from "@/lib/datetime-ist";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { DashboardActions } from "@/components/layout/dashboard-actions";
 import {
   Table,
   TableBody,
@@ -55,48 +52,7 @@ export default async function DashboardPage() {
         description={`${scopeLabel}. Review what needs attention and keep work moving.`}
       />
       <WorkspaceActions>
-        {data.actor.role !== "FINANCE" && (
-          <Button asChild>
-            <Link href="/quotations/new">
-              <Plus aria-hidden="true" />
-              New quotation
-            </Link>
-          </Button>
-        )}
-        {!isRep && (
-          <Button variant="outline" asChild>
-            <Link href="/approvals">
-              <CheckCircle aria-hidden="true" />
-              Review approvals
-            </Link>
-          </Button>
-        )}
-        <Button variant="outline" asChild>
-          <Link href="/quotations?view=board">
-            <FileText aria-hidden="true" />
-            Open pipeline
-          </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/invoices">
-            <Receipt aria-hidden="true" />
-            View invoices
-          </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/analytics">
-            <ChartBar aria-hidden="true" />
-            View analytics
-          </Link>
-        </Button>
-        {data.actor.role === "ADMIN" && (
-          <Button variant="outline" asChild>
-            <Link href="/admin/users?role=PENDING">
-              <Users aria-hidden="true" />
-              Review accounts
-            </Link>
-          </Button>
-        )}
+        <DashboardActions role={data.actor.role} />
       </WorkspaceActions>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

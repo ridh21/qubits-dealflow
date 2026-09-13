@@ -14,7 +14,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <div className="bg-muted text-muted-foreground grid size-11 place-items-center rounded-full">
+      <div className="bg-primary-100 text-primary-700 grid size-12 place-items-center rounded-2xl">
         {icon ?? <Stack aria-hidden="true" className="size-5" />}
       </div>
       <div className="space-y-1.5">

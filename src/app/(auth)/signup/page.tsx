@@ -7,6 +7,7 @@ export default function SignupPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
+        <p className="text-primary-700 mb-3 text-sm">Your next chapter starts here</p>
         <h1 className="font-display text-2xl font-semibold">Request access</h1>
         <p className="text-muted-foreground text-sm">
           Your account is created straight away, but an admin assigns your role before you can sign

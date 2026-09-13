@@ -7,14 +7,14 @@ import path from "node:path";
  * changes in the theme, change it here too.
  */
 export const brand = {
-  fg: "#1e1a16",
-  primary: "#c2460d",
-  primary50: "#fff6eb",
-  primary100: "#ffe6cf",
-  muted: "#f9f6f3",
-  mutedFg: "#68625e",
-  border: "#e7e4e0",
-  success: "#03a14a",
+  fg: "#18181b",
+  primary: "#357dff",
+  primary50: "#f0f5ff",
+  primary100: "#e8f0ff",
+  muted: "#f7fafc",
+  mutedFg: "#64646c",
+  border: "#e5e5e8",
+  success: "#16804a",
   destructive: "#df2225",
 } as const;
 

@@ -132,7 +132,7 @@ export function QuotationListFilters({
       onSubmit={submit}
       aria-label="Quotation filters"
       aria-busy={pending}
-      className="space-y-4 rounded-xl border p-4"
+      className="space-y-4 rounded-2xl border bg-card p-5"
     >
       <input type="hidden" name="view" value={params.view} />
       <input type="hidden" name="pageSize" value={params.pageSize} />

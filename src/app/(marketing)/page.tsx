@@ -6,6 +6,7 @@ import { Pricing } from "@/components/marketing/pricing";
 import { Faq } from "@/components/marketing/faq";
 import { Cta } from "@/components/marketing/cta";
 import { SiteFooter } from "@/components/marketing/site-footer";
+import { MarketingMotion } from "@/components/marketing/marketing-motion";
 
 export const metadata = {
   title: "DealFlow360 — quote to cash, accounted for",
@@ -16,13 +17,15 @@ export const metadata = {
 export default function LandingPage() {
   return (
     <PageRails>
-      <SiteNav />
-      <Hero />
-      <Flow />
-      <Pricing />
-      <Faq />
-      <Cta />
-      <SiteFooter />
+      <MarketingMotion>
+        <SiteNav />
+        <Hero />
+        <Flow />
+        <Pricing />
+        <Faq />
+        <Cta />
+        <SiteFooter />
+      </MarketingMotion>
     </PageRails>
   );
 }
